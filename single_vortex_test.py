@@ -6,9 +6,6 @@ import numpy as np
 import tdgl
 from tdgl.geometry import box, circle
 
-
-
-
 #setting up the superconductor material
 units_length="nm"
 
@@ -23,9 +20,7 @@ B_c= 440 #mT
 B_c2= 23e+1000 #mT
 
 
-
 print(f"kappa= {gl_kappa}")
-
 
 sc_layer = tdgl.Layer(coherence_length=xi, london_lambda=depth_lambda, thickness=d, gamma=gamma_phonon)
 
@@ -45,14 +40,8 @@ B_app=B_c1*80
 tdgl_options= tdgl.SolverOptions(solve_time=100,field_units="mT", current_units="uA")
 solution_zero_current= tdgl.solve(sc_device, tdgl_options, applied_vector_potential=B_app)
 
-
-
-
 fig, axes = solution_zero_current.plot_order_parameter(figsize=(5.5, 4))
 fig, ax = solution_zero_current.plot_currents(min_stream_amp=0.075, vmin=0, vmax=10)
 
 
-
 plt.show()
-
-print("so far so good")
