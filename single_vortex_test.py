@@ -7,6 +7,7 @@ import tdgl
 from tdgl.geometry import box, circle, ellipse
 from pint import UnitRegistry
 ureg=UnitRegistry()
+#import typing
 
 
 #units to be used throughout the simulation
@@ -25,17 +26,17 @@ sc_layer = tdgl.Layer(coherence_length=xi, london_lambda=lambda_depth, thickness
 print(f"kappa= {kappa_gl}, screening length= {lambda_eff_screening}{units_length}, lambda= {lambda_depth}{units_length}, coherence length={xi}{units_length}")
 
 #parameters of environment
-B_app=140 #60
+B_app=150 #60
 epsilon_disorder = 1
 print(f"Applied magnetic field: {B_app}{units_field}")
 
 #outer geometry of the SC film
 side_length_sc_film = 400 #1000
 side_width_sc_film = side_length_sc_film
-base_sc_film = box(width=side_length_sc_film, points=401)
-sc_film= tdgl.Polygon("film", points=base_sc_film)#.buffer(0)
+base_sc_film = box(width=side_length_sc_film, points=601)
+sc_film= tdgl.Polygon("film", points=base_sc_film)#.resample(701)
 #geometry of circular hole in the middle
-hole_radius_factor = 1 #5
+hole_radius_factor = 5 #5
 hole_radius = hole_radius_factor*xi
 hole_center = (0,0)
 hole_round = tdgl.Polygon("round hole", points=circle(radius=hole_radius, center=hole_center))
@@ -44,7 +45,7 @@ notch_ellipse_big= 60 #length of notch
 notch_ellipse_small= 20 #half of height of notch
 y_displacement_notch = -0.3*side_length_sc_film
 hole_notch= (
-    tdgl.Polygon("notch", points=ellipse(a=notch_ellipse_big,b=notch_ellipse_small, points=201))
+    tdgl.Polygon("notch", points=ellipse(a=notch_ellipse_big,b=notch_ellipse_small, points=401))
     .difference(tdgl.Polygon(points=box(width=notch_ellipse_big,height=2*notch_ellipse_small))
                 .translate(dx=notch_ellipse_big/2))
                 .translate(dx=0.5*side_length_sc_film, dy=y_displacement_notch)
@@ -61,20 +62,30 @@ track_center=(0,0)
 track = tdgl.Polygon("track", points=box(width=0.3*xi, height=track_length, center=track_center)).rotate(degrees=track_angle,origin=track_center)#.union(hole_notch).resample(200)
 track_notch_gap_y = notch_endpoint[1] - track.bbox[0][1]
 track_notch_gap_x = notch_endpoint[0] - track.bbox[1][0]
-track=track.translate(dx=track_notch_gap_x,dy=track_notch_gap_y)#.union(hole_round).resample(201)
+track=track.translate(dx=track_notch_gap_x,dy=track_notch_gap_y).difference(hole_round).resample(801)
 #track = box(width=xi, length=track_length).rotate(track_angle)
 print(f"track box: {track.bbox}")
 print(f"notch endpoint: {notch_endpoint}, track length: {track_length}, track angle: {track_angle}")
-
 #output about simulation geometry
 print(f"Dimensions of the SC film: {side_length_sc_film}x{side_length_sc_film}{units_length}, radius of the hole: {hole_radius}{units_length}")
 
+#function for disorder_epsilon
+def track_epsilon(r):
+    if track.contains_points(r)==True or track.on_boundary(r)==True:
+        epsilon=0.5
+    else:
+        epsilon=1.0
+    return epsilon
+
+
+
 #put SC material (tdgl.Layer) and geometry (tdgl.Polygon) together into a complete device (tdgl.Device)
-sc_device= tdgl.Device("square with hole", layer=sc_layer, film=sc_film, holes=[], length_units=units_length)
+sc_device= tdgl.Device("square with hole", layer=sc_layer, film=sc_film, holes=[hole_round, hole_notch], length_units=units_length)
 #discretize the device into a mesh to be solved over
-mesh_edge_factor = 1 #should be small compared to xi
+mesh_edge_factor = 1.0 #should be small compared to xi
 sc_device.make_mesh(max_edge_length=mesh_edge_factor*xi, smooth=1) #smooth 1 or 100 had very little effect on how the mesh looks
 fig, ax = sc_device.plot(mesh=True)
+
 
 #theoretical calculations
 PHI0 = 2.06783e-15*ureg.T*ureg.m**2
@@ -93,8 +104,8 @@ print(f"Vortices that can enter: {fluxoid_theoretic}")
 
 
 #solve TDGL
-tdgl_options = tdgl.SolverOptions(skip_time=0, solve_time=1000,monitor=False, monitor_update_interval=0.5, field_units=units_field, current_units=units_current)
-solution_zero_current = tdgl.solve(sc_device, tdgl_options, applied_vector_potential=B_app, disorder_epsilon=epsilon_disorder)
+tdgl_options = tdgl.SolverOptions(skip_time=0, solve_time=100,monitor=False, monitor_update_interval=0.5, field_units=units_field, current_units=units_current)
+solution_zero_current = tdgl.solve(sc_device, tdgl_options, applied_vector_potential=B_app, disorder_epsilon=track_epsilon)
 
 fig, axes= solution_zero_current.plot_order_parameter(squared=False)
 plt.suptitle(r"Order Parameter Plot, $B_{app}$="+f"{B_app}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_depth}{units_length}, $\\xi$={xi}{units_length})")
@@ -129,10 +140,10 @@ plt.title(subtitle, fontsize=12)
 
 file_name=f"figure_plots/phi_order-B_{B_app}{units_field}_hole{hole_radius}{units_length}.png"
 #plt.savefig(file_name)
-'''
+
 #output and visualization of current density
 fig, ax = solution_zero_current.plot_currents(min_stream_amp=0.075, vmin=0, vmax=10)
-'''
+
 file_name=f"figure_plots/K_current-B_{B_app}{units_field}_hole{hole_radius}{units_length}.png"
 plt.savefig(file_name)
 
