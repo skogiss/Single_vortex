@@ -16,110 +16,130 @@ units_field="mT"
 units_current="uA"
 
 #parameters of the superconducting material to create SC layer
-xi=10 #10
-lambda_depth=40 #80
+xi_coherence=10 #10
+lambda_london=40 #80
 d=1
-gamma_phonon = 1#1
-kappa_gl= lambda_depth/xi
-lambda_eff_screening = lambda_depth**2/xi
-sc_layer = tdgl.Layer(coherence_length=xi, london_lambda=lambda_depth, thickness=d, gamma=gamma_phonon)
-print(f"kappa= {kappa_gl}, screening length= {lambda_eff_screening}{units_length}, lambda= {lambda_depth}{units_length}, coherence length={xi}{units_length}")
+gamma_scattering_gap = 1#1
+kappa_gl= lambda_london/xi_coherence
+lambda_eff_screening = lambda_london**2/xi_coherence
+sc_layer = tdgl.Layer(coherence_length=xi_coherence, london_lambda=lambda_london, thickness=d, gamma=gamma_scattering_gap)
+print(f"kappa= {kappa_gl}, screening length= {lambda_eff_screening}{units_length}, lambda= {lambda_london}{units_length}, coherence length={xi_coherence}{units_length}")
 
 #parameters of environment
-B_app=150 #60
-epsilon_disorder = 1
-print(f"Applied magnetic field: {B_app}{units_field}")
+B_applied_field=145 #60
+print(f"Applied magnetic field: {B_applied_field}{units_field}")
 
 #outer geometry of the SC film
-side_length_sc_film = 400 #1000
-side_width_sc_film = side_length_sc_film
-base_sc_film = box(width=side_length_sc_film, points=601)
-sc_film= tdgl.Polygon("film", points=base_sc_film)#.resample(701)
-#geometry of circular hole in the middle
-hole_radius_factor = 5 #5
-hole_radius = hole_radius_factor*xi
-hole_center = (0,0)
-hole_round = tdgl.Polygon("round hole", points=circle(radius=hole_radius, center=hole_center))
-#notch geometry
-notch_ellipse_big= 60 #length of notch
-notch_ellipse_small= 20 #half of height of notch
-y_displacement_notch = -0.3*side_length_sc_film
-hole_notch= (
-    tdgl.Polygon("notch", points=ellipse(a=notch_ellipse_big,b=notch_ellipse_small, points=401))
-    .difference(tdgl.Polygon(points=box(width=notch_ellipse_big,height=2*notch_ellipse_small))
-                .translate(dx=notch_ellipse_big/2))
-                .translate(dx=0.5*side_length_sc_film, dy=y_displacement_notch)
-)
-#track geometry
-tmp_coord_notch = hole_notch.bbox
-notch_endpoint = (tmp_coord_notch[0][0], (tmp_coord_notch[0][1]+(tmp_coord_notch[1][1]-tmp_coord_notch[0][1])/2))
-#track_length = np.linalg.norm(np.array(notch_endpoint)-np.array(hole_center))
-track_length = np.sqrt(notch_endpoint[0]**2 + notch_endpoint[1]**2)
-track_angle = np.arccos((hole_center[1]-notch_endpoint[1])/track_length)
-track_angle= np.degrees(track_angle)
-track_center=(0,0)
-#track_center = (notch_endpoint[0]/2, notch_endpoint[1]+track_length/2)
-track = tdgl.Polygon("track", points=box(width=0.3*xi, height=track_length, center=track_center)).rotate(degrees=track_angle,origin=track_center)#.union(hole_notch).resample(200)
-track_notch_gap_y = notch_endpoint[1] - track.bbox[0][1]
-track_notch_gap_x = notch_endpoint[0] - track.bbox[1][0]
-track=track.translate(dx=track_notch_gap_x,dy=track_notch_gap_y).difference(hole_round).resample(801)
-#track = box(width=xi, length=track_length).rotate(track_angle)
-print(f"track box: {track.bbox}")
-print(f"notch endpoint: {notch_endpoint}, track length: {track_length}, track angle: {track_angle}")
-#output about simulation geometry
-print(f"Dimensions of the SC film: {side_length_sc_film}x{side_length_sc_film}{units_length}, radius of the hole: {hole_radius}{units_length}")
+sc_film_length = 400 #1000
+sc_film_width = sc_film_length
+#sc_film= tdgl.Polygon("film", points=box(width=sc_film_length)).resample(400).buffer(0)#.resample(600)
 
-#function for disorder_epsilon
+#geometry of circular hole in the middle
+def create_hole_round(hole_center, hole_radius):
+    #hole_radius_factor = 5 #5
+    #hole_radius = hole_radius_factor*xi_coherence
+    #hole_center = (0,0)
+    hole_round = tdgl.Polygon("round hole", points=circle(radius=hole_radius, center=hole_center))
+    return hole_round
+
+#notch geometry
+
+notch_ellipse_big= 60 #length of notch, 60
+notch_ellipse_small= 20 #half of height of notch, 20
+y_displacement_notch = -0.3*sc_film_length
+
+def create_notch(notch_ellipse_big, notch_ellipse_small, y_displacement_notch):
+    hole_notch=tdgl.Polygon("notch test", points=ellipse(a=notch_ellipse_big,b=notch_ellipse_small))
+    hole_notch=hole_notch.translate(dx=sc_film_width/2, dy=y_displacement_notch) #problem: dx displacement
+    #notch_diffbox=tdgl.Polygon("diffbox",points=box(width=notch_ellipse_big,height=2*notch_ellipse_small)).translate(dx=notch_ellipse_big/2)
+    #hole_notch=hole_notch.difference(notch_diffbox).buffer(0)#.translate(dx=sc_film_width/2, dy=y_displacement_notch)#.resample(401) #problem: dx displacement
+    return hole_notch
+
+hole_notch_film=create_notch(notch_ellipse_big, notch_ellipse_small, y_displacement_notch)
+
+sc_film= tdgl.Polygon("film", points=box(width=sc_film_length)).difference(hole_notch_film).resample(400).buffer(0)
+
+hole_radius = 2*xi_coherence
+hole_center = (0,0)
+hole_round= create_hole_round(hole_center, hole_radius)
+
+#track geometry
+def create_track():
+    hole_notch=hole_notch_film.difference(tdgl.Polygon(points=box(width=notch_ellipse_big,height=2*notch_ellipse_small)).translate(dx=notch_ellipse_big/2))
+    tmp_coord_notch = hole_notch.bbox
+    notch_endpoint = (tmp_coord_notch[0][0], (tmp_coord_notch[0][1]+(tmp_coord_notch[1][1]-tmp_coord_notch[0][1])/2))
+    #track_length = np.linalg.norm(np.array(notch_endpoint)-np.array(hole_center))
+    track_length = np.sqrt(notch_endpoint[0]**2 + notch_endpoint[1]**2)
+    track_angle = np.arccos((hole_center[1]-notch_endpoint[1])/track_length)
+    track_angle= np.degrees(track_angle)
+    track_center=(0,0)
+    #track_center = (notch_endpoint[0]/2, notch_endpoint[1]+track_length/2)
+    track = tdgl.Polygon("track", points=box(width=0.3*xi_coherence, height=track_length, center=track_center)).rotate(degrees=track_angle,origin=track_center)#.union(hole_notch).resample(200)
+    track_notch_gap_y = notch_endpoint[1] - track.bbox[0][1]
+    track_notch_gap_x = notch_endpoint[0] - track.bbox[1][0]
+    track=track.translate(dx=track_notch_gap_x,dy=track_notch_gap_y).difference(hole_round).resample(800)
+    #track = box(width=xi_coherence, length=track_length).rotate(track_angle)
+    print(f"track box: {track.bbox}")
+    print(f"notch endpoint: {notch_endpoint}, track length: {track_length}, track angle: {track_angle}")
+    return track
+
+
+track=create_track()
+#disorder_epsilon in track
 def track_epsilon(r):
     if track.contains_points(r)==True or track.on_boundary(r)==True:
-        epsilon=0.5
+        epsilon=0.8
     else:
         epsilon=1.0
     return epsilon
 
 
+#output about simulation geometry
+print(f"Dimensions of the SC film: {sc_film_length}x{sc_film_length}{units_length}")
+
 
 #put SC material (tdgl.Layer) and geometry (tdgl.Polygon) together into a complete device (tdgl.Device)
-sc_device= tdgl.Device("square with hole", layer=sc_layer, film=sc_film, holes=[hole_round, hole_notch], length_units=units_length)
+sc_device= tdgl.Device("square with hole", layer=sc_layer, film=sc_film, holes=[hole_round], length_units=units_length)
 #discretize the device into a mesh to be solved over
-mesh_edge_factor = 1.0 #should be small compared to xi
-sc_device.make_mesh(max_edge_length=mesh_edge_factor*xi, smooth=1) #smooth 1 or 100 had very little effect on how the mesh looks
+mesh_edge_factor = 1.0 #should be small comped to xi_coherence
+sc_device.make_mesh(max_edge_length=mesh_edge_factor*xi_coherence, smooth=1) #smooth 1 or 100 had very little effect on how the mesh looks
 fig, ax = sc_device.plot(mesh=True)
-
+plt.show()
 
 #theoretical calculations
 PHI0 = 2.06783e-15*ureg.T*ureg.m**2
 #critical fields
-Bc_thermo=(PHI0/(2*np.sqrt(2)*np.pi*lambda_depth*ureg(units_length).to('m')*xi*ureg(units_length).to('m'))).to(units_field)
-Bc_lower=Bc_thermo*np.log(kappa_gl)/(np.sqrt(2)*kappa_gl)
-Bc_upper=np.sqrt(2)*kappa_gl*Bc_thermo
-print(f"Bc(thermo)= {Bc_thermo}, Bc(lower)= {Bc_lower}, Bc(upper)= {Bc_upper}")
+B_critical_thermo=(PHI0/(2*np.sqrt(2)*np.pi*lambda_london*ureg(units_length).to('m')*xi_coherence*ureg(units_length).to('m'))).to(units_field)
+B_critical_lower=B_critical_thermo*np.log(kappa_gl)/(np.sqrt(2)*kappa_gl)
+B_critical_upper=np.sqrt(2)*kappa_gl*B_critical_thermo
+print(f"Bc(thermo)= {B_critical_thermo}, Bc(lower)= {B_critical_lower}, Bc(upper)= {B_critical_upper}")
 #nr of vortices
-converted_B_app=B_app*ureg(units_field).to('T')
-converted_width_film=side_width_sc_film*ureg(units_length).to('m')
-converted_length_film=side_length_sc_film*ureg(units_length).to('m')
-print(f"PHI0= {PHI0}, B_app_T: {converted_B_app}, film length: {converted_width_film}")
-fluxoid_theoretic = (converted_B_app*converted_width_film*converted_length_film)/PHI0
+converted_B_applied_field=B_applied_field*ureg(units_field).to('T')
+converted_width_film=sc_film_width*ureg(units_length).to('m')
+converted_length_film=sc_film_length*ureg(units_length).to('m')
+print(f"PHI0= {PHI0}, B_applied_field_T: {converted_B_applied_field}, film length: {converted_width_film}")
+fluxoid_theoretic = (converted_B_applied_field*converted_width_film*converted_length_film)/PHI0
 print(f"Vortices that can enter: {fluxoid_theoretic}")
 
 
 #solve TDGL
-tdgl_options = tdgl.SolverOptions(skip_time=0, solve_time=100,monitor=False, monitor_update_interval=0.5, field_units=units_field, current_units=units_current)
-solution_zero_current = tdgl.solve(sc_device, tdgl_options, applied_vector_potential=B_app, disorder_epsilon=track_epsilon)
+tdgl_options = tdgl.SolverOptions(skip_time=0, solve_time=200,monitor=True, monitor_update_interval=0.5, field_units=units_field, current_units=units_current)
+solution_zero_current = tdgl.solve(sc_device, tdgl_options, applied_vector_potential=B_applied_field, disorder_epsilon=track_epsilon)
 
 fig, axes= solution_zero_current.plot_order_parameter(squared=False)
-plt.suptitle(r"Order Parameter Plot, $B_{app}$="+f"{B_app}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_depth}{units_length}, $\\xi$={xi}{units_length})")
+plt.suptitle(r"Order Parameter Plot, $B_{app}$="+f"{B_applied_field}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_london}{units_length}, $\\xi_coherence$={xi_coherence}{units_length})")
 
-london_box=box(width=(side_length_sc_film-lambda_depth))
-xi_box=box(width=(side_length_sc_film-xi))
+london_box=box(width=(sc_film_length-lambda_london))
+xi_coherence_box=box(width=(sc_film_length-xi_coherence))
 for ax in axes:
     ax.plot(*london_box.T)
-    ax.plot(*xi_box.T)
+    ax.plot(*xi_coherence_box.T)
 
 
 
 #postprocessing
 #Determine how many vortices over area
+'''
 r_fluxoid_calc_surface = 2*hole_radius
 center_fluxoid_calc_surface = (0,0)
 fluxoid_calc_surface = circle(radius=r_fluxoid_calc_surface, center=center_fluxoid_calc_surface, points=201)
@@ -130,21 +150,22 @@ scale_sc_film_by = 0.99  #must be lower than 1 because fluxoid calculation area 
 reduced_simulation_surface = sc_film.scale(xfact=scale_sc_film_by, yfact=scale_sc_film_by).points
 fluxoid_in_simulation_area = solution_zero_current.polygon_fluxoid(reduced_simulation_surface, with_units=False)
 print(f"Fluxoid over entire simulation area: \n\t{fluxoid_in_simulation_area} Phi_0 \n\tTotal fluxoid over entire simulation area: {sum(fluxoid_in_simulation_area):.2f} Phi_0 \n")
+'''
 
 '''
 #output and visualization of order parameter
 fig, axes = solution_zero_current.plot_order_parameter()
 plt.suptitle("Order Parameter Plot", fontsize=16)
-subtitle = f"B_app = {B_app} {units_field}"
+subtitle = f"B_applied_field = {B_applied_field} {units_field}"
 plt.title(subtitle, fontsize=12)
 
-file_name=f"figure_plots/phi_order-B_{B_app}{units_field}_hole{hole_radius}{units_length}.png"
+file_name=f"figure_plots/phi_order-B_{B_applied_field}{units_field}_hole{hole_radius}{units_length}.png"
 #plt.savefig(file_name)
 
 #output and visualization of current density
 fig, ax = solution_zero_current.plot_currents(min_stream_amp=0.075, vmin=0, vmax=10)
 
-file_name=f"figure_plots/K_current-B_{B_app}{units_field}_hole{hole_radius}{units_length}.png"
+file_name=f"figure_plots/K_current-B_{B_applied_field}{units_field}_hole{hole_radius}{units_length}.png"
 plt.savefig(file_name)
 
 #visualization of fluxoid calculation areas
