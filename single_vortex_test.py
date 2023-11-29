@@ -15,10 +15,37 @@ units_length="nm"
 units_field="mT"
 units_current="uA"
 
+##############ENTER USER-DEFINED SIMULATION AND MATERIAL PARAMETERS HERE###################
+enter_xi_coherence = 10
+enter_lambda_london = 80
+enter_film_thickness = 1
+enter_film_length = 800
+enter_film_width = enter_film_length
+
+make_notch_on_vertical = False
+enter_notch_length= 60
+enter_notch_max_heigth= 40
+enter_notch_placement_y = -0.8*enter_film_length/2
+
+make_hole = True
+enter_hole_radius = 2*enter_xi_coherence
+enter_hole_center = (0,0)
+
+make_track = True
+enter_track_width = 0.3*enter_xi_coherence
+
+enter_B_applied_field = 3000
+
+enter_max_edge_length = 1.5 * enter_xi_coherence  #mesh element size, should be small comped to xi_coherence
+tdgl_options = tdgl.SolverOptions(skip_time=0, solve_time=10,monitor=True, monitor_update_interval=0.5, field_units=units_field, current_units=units_current)
+show_london_box=True
+show_xi_coherence_box=True
+##############MAIN SIMULATION LOGIC STARTS BEYOND THIS POINT##############################
+
 #parameters of the superconducting material to create SC layer
-xi_coherence=10 #10
-lambda_london=40 #80
-d=1
+xi_coherence= enter_xi_coherence #10
+lambda_london= enter_lambda_london #80
+d= enter_film_thickness
 gamma_scattering_gap = 1#1
 kappa_gl= lambda_london/xi_coherence
 lambda_eff_screening = lambda_london**2/xi_coherence
@@ -26,39 +53,44 @@ sc_layer = tdgl.Layer(coherence_length=xi_coherence, london_lambda=lambda_london
 print(f"kappa= {kappa_gl}, screening length= {lambda_eff_screening}{units_length}, lambda= {lambda_london}{units_length}, coherence length={xi_coherence}{units_length}")
 
 #parameters of environment
-B_applied_field=145 #60
+B_applied_field= enter_B_applied_field #60
 print(f"Applied magnetic field: {B_applied_field}{units_field}")
 
 #outer geometry of the SC film
-sc_film_length = 400 #1000
-sc_film_width = sc_film_length
+sc_film_length = enter_film_length #1000
+sc_film_width = enter_film_width
+
+sc_film= tdgl.Polygon("film", points=box(width=sc_film_width, height=sc_film_length))
 
 #notch geometry
-notch_ellipse_big= 50 #length of notch, 60
-notch_ellipse_small= 50 #half of height of notch, 20
-notch_length= 60
-notch_max_heigth= 40
-notch_placement_y = 0*sc_film_length
+notch_length= enter_notch_length
+notch_max_heigth= enter_notch_max_heigth
+notch_placement_y = enter_notch_placement_y
 
 def create_notch(notch_length, notch_max_heigth, notch_placement_y):
     hole_notch=tdgl.Polygon("notch test", points=ellipse(a=notch_length,b=notch_max_heigth/2))
     hole_notch=hole_notch.translate(dx=sc_film_width/2, dy=notch_placement_y)
     return hole_notch
 
+
+#create a notch and optionally add it to film
 notch_in_film1=create_notch(notch_length, notch_max_heigth, notch_placement_y)
+if make_notch_on_vertical == True:
+    sc_film= sc_film.difference(notch_in_film1).resample(400).buffer(0)
 
-#create a superconducting film with a notch
-sc_film= tdgl.Polygon("film", points=box(width=sc_film_length)).difference(notch_in_film1).resample(400).buffer(0)
-
-#geometry of circular hole in the middle
-hole_radius = 2*xi_coherence
-hole_center = (-50,-20)
+#geometry of circular hole
+hole_radius = enter_hole_radius
+hole_center = enter_hole_center
 
 def create_hole_round(hole_center, hole_radius):
     hole_round = tdgl.Polygon("round hole", points=circle(radius=hole_radius, center=hole_center))
     return hole_round
 
-hole_round= create_hole_round(hole_center, hole_radius)
+if make_hole== True:
+    hole_round= create_hole_round(hole_center, hole_radius)
+    holes_in_film= [hole_round]
+else:
+    holes_in_film=[]
 
 #track geometry
 def create_track(track_width, notch_in_film, center_of_hole):
@@ -94,16 +126,27 @@ def create_track(track_width, notch_in_film, center_of_hole):
     print(f"notch endpoint: {notch_endpoint}, track length: {track_length}, track angle: {track_angle}")
     return track
 
-track_width = 0.3*xi_coherence
-track=create_track(track_width, notch_in_film1, hole_center)
+if make_track==True:
+    if not make_hole==True:
+        print("WARNING! Can't create track because there are no holes. Constant epsilon_disorder will be set.")
+        def track_epsilon(r):
+            epsilon=1
+            return epsilon
 
-#track dependent disorder_epsilon
-def track_epsilon(r):
-    if track.contains_points(r)==True or track.on_boundary(r)==True:
-        epsilon=0.5
-    else:
-        epsilon=1.0
-    return epsilon
+    elif make_hole==True:
+        track_width = enter_track_width
+        track=create_track(track_width, notch_in_film1, hole_center)
+        #track dependent disorder_epsilon
+        def track_epsilon(r):
+            if track.contains_points(r)==True or track.on_boundary(r)==True:
+                epsilon=0.5
+            else:
+                epsilon=1.0
+            return epsilon
+else:
+    def track_epsilon(r):
+        epsilon=1
+        return epsilon
 
 
 #output about simulation geometry
@@ -111,10 +154,9 @@ print(f"Dimensions of the SC film: {sc_film_length}x{sc_film_length}{units_lengt
 
 
 #put SC material (tdgl.Layer) and geometry (tdgl.Polygon) together into a complete device (tdgl.Device)
-sc_device= tdgl.Device("square with hole", layer=sc_layer, film=sc_film, holes=[hole_round], length_units=units_length)
+sc_device= tdgl.Device("square with hole", layer=sc_layer, film=sc_film, holes=holes_in_film, length_units=units_length)
 #discretize the device into a mesh to be solved over
-mesh_edge_factor = 1.0 #should be small comped to xi_coherence
-sc_device.make_mesh(max_edge_length=mesh_edge_factor*xi_coherence, smooth=1) #smooth 1 or 100 had very little effect on how the mesh looks
+sc_device.make_mesh(max_edge_length=enter_max_edge_length, smooth=1) #smooth 1 or 100 had very little effect on how the mesh looks
 fig, ax = sc_device.plot(mesh=True)
 plt.show()
 
@@ -135,17 +177,19 @@ print(f"Vortices that can enter: {fluxoid_theoretic}")
 
 
 #solve TDGL
-tdgl_options = tdgl.SolverOptions(skip_time=0, solve_time=20,monitor=True, monitor_update_interval=0.5, field_units=units_field, current_units=units_current)
 solution_zero_current = tdgl.solve(sc_device, tdgl_options, applied_vector_potential=B_applied_field, disorder_epsilon=track_epsilon)
 
 fig, axes= solution_zero_current.plot_order_parameter(squared=False)
 plt.suptitle(r"Order Parameter Plot, $B_{app}$="+f"{B_applied_field}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_london}{units_length}, $\\xi_coherence$={xi_coherence}{units_length})")
 
-london_box=box(width=(sc_film_length-lambda_london))
-xi_coherence_box=box(width=(sc_film_length-xi_coherence))
-for ax in axes:
-    ax.plot(*london_box.T)
-    ax.plot(*xi_coherence_box.T)
+if show_london_box==True:
+    london_box=box(width=(sc_film_length-lambda_london))
+    for ax in axes:
+        ax.plot(*london_box.T)
+if show_xi_coherence_box==True:
+    xi_coherence_box=box(width=(sc_film_length-xi_coherence))
+    for ax in axes:
+        ax.plot(*xi_coherence_box.T)
 
 
 
