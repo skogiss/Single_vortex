@@ -1,14 +1,17 @@
 import os
+#import tempfile
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
+import h5py
+
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 import numpy as np
 import tdgl
 from tdgl.geometry import box, circle, ellipse
+from tdgl.visualization import create_animation
 from pint import UnitRegistry
 ureg=UnitRegistry()
-#import typing
-
 
 #units to be used throughout the simulation
 units_length="nm"
@@ -18,6 +21,10 @@ units_current="uA"
 ##############ENTER USER-DEFINED SIMULATION AND MATERIAL PARAMETERS HERE###################
 enter_xi_coherence = 10
 enter_lambda_london = 80
+enter_gamma_scattering = 1
+
+enter_B_applied_field = 75.5
+
 enter_film_thickness = 1
 enter_film_length = 800
 enter_film_width = enter_film_length
@@ -25,28 +32,37 @@ enter_film_width = enter_film_length
 make_notch_on_vertical = False
 enter_notch_length= 60
 enter_notch_max_heigth= 40
-enter_notch_placement_y = -0.8*enter_film_length/2
+enter_notch_placement_y = 0.6*enter_film_length/2
 
 make_hole = True
-enter_hole_radius = 2*enter_xi_coherence
+enter_hole_radius = 5*enter_xi_coherence
 enter_hole_center = (0,0)
 
-make_track = True
-enter_track_width = 0.3*enter_xi_coherence
-
-enter_B_applied_field = 3000
+make_track = False
+enter_track_width = 1*enter_xi_coherence
 
 enter_max_edge_length = 1.5 * enter_xi_coherence  #mesh element size, should be small comped to xi_coherence
-tdgl_options = tdgl.SolverOptions(skip_time=0, solve_time=10,monitor=True, monitor_update_interval=0.5, field_units=units_field, current_units=units_current)
-show_london_box=True
-show_xi_coherence_box=True
+enter_skip_time = 0
+enter_solve_time = 1200
+enter_save_every = 100
+do_monitor = False
+show_london_box=False
+show_xi_coherence_box=False
+
+MAKE_ANIMATIONS = True
+enter_write_solution_results = "_tmp_h5results.h5"
+enter_filename_animation = "geometrytest.gif"
+enter_quantities = ('order_parameter', 'phase', 'supercurrent', 'normal_current')
+enter_fps = 30
+
 ##############MAIN SIMULATION LOGIC STARTS BEYOND THIS POINT##############################
+
 
 #parameters of the superconducting material to create SC layer
 xi_coherence= enter_xi_coherence #10
 lambda_london= enter_lambda_london #80
 d= enter_film_thickness
-gamma_scattering_gap = 1#1
+gamma_scattering_gap = enter_gamma_scattering#1
 kappa_gl= lambda_london/xi_coherence
 lambda_eff_screening = lambda_london**2/xi_coherence
 sc_layer = tdgl.Layer(coherence_length=xi_coherence, london_lambda=lambda_london, thickness=d, gamma=gamma_scattering_gap)
@@ -139,7 +155,7 @@ if make_track==True:
         #track dependent disorder_epsilon
         def track_epsilon(r):
             if track.contains_points(r)==True or track.on_boundary(r)==True:
-                epsilon=0.5
+                epsilon=0.7
             else:
                 epsilon=1.0
             return epsilon
@@ -158,7 +174,7 @@ sc_device= tdgl.Device("square with hole", layer=sc_layer, film=sc_film, holes=h
 #discretize the device into a mesh to be solved over
 sc_device.make_mesh(max_edge_length=enter_max_edge_length, smooth=1) #smooth 1 or 100 had very little effect on how the mesh looks
 fig, ax = sc_device.plot(mesh=True)
-plt.show()
+#plt.show()
 
 #theoretical calculations
 PHI0 = 2.06783e-15*ureg.T*ureg.m**2
@@ -177,10 +193,14 @@ print(f"Vortices that can enter: {fluxoid_theoretic}")
 
 
 #solve TDGL
+tdgl_options = tdgl.SolverOptions(skip_time=enter_skip_time, solve_time=enter_solve_time, monitor=False, monitor_update_interval=0.5, save_every=enter_save_every, output_file=enter_write_solution_results, field_units=units_field, current_units=units_current)
 solution_zero_current = tdgl.solve(sc_device, tdgl_options, applied_vector_potential=B_applied_field, disorder_epsilon=track_epsilon)
 
+if MAKE_ANIMATIONS==True:
+    create_animation(input_file=enter_write_solution_results, output_file=enter_filename_animation, quantities=enter_quantities, fps=enter_fps, max_cols=2)
+
 fig, axes= solution_zero_current.plot_order_parameter(squared=False)
-plt.suptitle(r"Order Parameter Plot, $B_{app}$="+f"{B_applied_field}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_london}{units_length}, $\\xi_coherence$={xi_coherence}{units_length})")
+plt.suptitle(f"Order Parameter Plot after T={enter_solve_time}, "+ r"$B_{app}$="+f"{B_applied_field}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_london}{units_length}, $\\xi$={xi_coherence}{units_length})")
 
 if show_london_box==True:
     london_box=box(width=(sc_film_length-lambda_london))
@@ -192,8 +212,8 @@ if show_xi_coherence_box==True:
         ax.plot(*xi_coherence_box.T)
 
 
-
 #postprocessing
+
 #Determine how many vortices over area
 '''
 r_fluxoid_calc_surface = 2*hole_radius
@@ -217,10 +237,10 @@ plt.title(subtitle, fontsize=12)
 
 file_name=f"figure_plots/phi_order-B_{B_applied_field}{units_field}_hole{hole_radius}{units_length}.png"
 #plt.savefig(file_name)
-
+'''
 #output and visualization of current density
 fig, ax = solution_zero_current.plot_currents(min_stream_amp=0.075, vmin=0, vmax=10)
-
+'''
 file_name=f"figure_plots/K_current-B_{B_applied_field}{units_field}_hole{hole_radius}{units_length}.png"
 plt.savefig(file_name)
 
