@@ -10,6 +10,7 @@ import numpy as np
 import tdgl
 from tdgl.geometry import box, circle, ellipse
 from tdgl.visualization import create_animation
+from tdgl.solution import data
 from pint import UnitRegistry
 ureg=UnitRegistry()
 
@@ -23,37 +24,41 @@ enter_xi_coherence = 10
 enter_lambda_london = 80
 enter_gamma_scattering = 1
 
-enter_B_applied_field = 75.5
+enter_B_applied_field = 55
 
 enter_film_thickness = 1
 enter_film_length = 800
 enter_film_width = enter_film_length
 
-make_notch_on_vertical = False
-enter_notch_length= 60
-enter_notch_max_heigth= 40
-enter_notch_placement_y = 0.6*enter_film_length/2
+make_notch_on_vertical = True
+enter_notch_length= 50
+enter_notch_max_heigth= 25
+enter_notch_orienation = "Right"
+enter_notch_placement_y = -0.1*enter_film_length/2
 
 make_hole = True
 enter_hole_radius = 5*enter_xi_coherence
-enter_hole_center = (0,0)
+enter_hole_center = (0,100)
 
-make_track = False
+make_track = True
 enter_track_width = 1*enter_xi_coherence
 
-enter_max_edge_length = 1.5 * enter_xi_coherence  #mesh element size, should be small comped to xi_coherence
+CONTINUE_SOLVING = False
+enter_filename_previous_solution = None
+enter_max_edge_length = 2 * enter_xi_coherence  #mesh element size, should be small comped to xi_coherence
 enter_skip_time = 0
-enter_solve_time = 1200
-enter_save_every = 100
+enter_solve_time = 500
+enter_save_every = 200
 do_monitor = False
 show_london_box=False
 show_xi_coherence_box=False
 
 MAKE_ANIMATIONS = True
-enter_write_solution_results = "_tmp_h5results.h5"
-enter_filename_animation = "geometrytest.gif"
-enter_quantities = ('order_parameter', 'phase', 'supercurrent', 'normal_current')
-enter_fps = 30
+enter_write_solution_results = "_tmp_h5_notchlf.h5"
+enter_animation_input = enter_write_solution_results
+enter_animation_output = "geom_notch_hole_track.gif"
+enter_animation_quantities = ('order_parameter', 'phase', 'supercurrent', 'normal_current')
+enter_fps = 10
 
 ##############MAIN SIMULATION LOGIC STARTS BEYOND THIS POINT##############################
 
@@ -85,7 +90,10 @@ notch_placement_y = enter_notch_placement_y
 
 def create_notch(notch_length, notch_max_heigth, notch_placement_y):
     hole_notch=tdgl.Polygon("notch test", points=ellipse(a=notch_length,b=notch_max_heigth/2))
-    hole_notch=hole_notch.translate(dx=sc_film_width/2, dy=notch_placement_y)
+    notch_placement_x = sc_film_width/2
+    if enter_notch_orienation == "Left":
+        notch_placement_x = (-1)*notch_placement_x
+    hole_notch=hole_notch.translate(dx=notch_placement_x, dy=notch_placement_y)
     return hole_notch
 
 
@@ -155,7 +163,7 @@ if make_track==True:
         #track dependent disorder_epsilon
         def track_epsilon(r):
             if track.contains_points(r)==True or track.on_boundary(r)==True:
-                epsilon=0.7
+                epsilon=0.6
             else:
                 epsilon=1.0
             return epsilon
@@ -172,8 +180,10 @@ print(f"Dimensions of the SC film: {sc_film_length}x{sc_film_length}{units_lengt
 #put SC material (tdgl.Layer) and geometry (tdgl.Polygon) together into a complete device (tdgl.Device)
 sc_device= tdgl.Device("square with hole", layer=sc_layer, film=sc_film, holes=holes_in_film, length_units=units_length)
 #discretize the device into a mesh to be solved over
+
 sc_device.make_mesh(max_edge_length=enter_max_edge_length, smooth=1) #smooth 1 or 100 had very little effect on how the mesh looks
-fig, ax = sc_device.plot(mesh=True)
+fig, ax = sc_device.plot(mesh=True, legend=False)
+
 #plt.show()
 
 #theoretical calculations
@@ -194,10 +204,13 @@ print(f"Vortices that can enter: {fluxoid_theoretic}")
 
 #solve TDGL
 tdgl_options = tdgl.SolverOptions(skip_time=enter_skip_time, solve_time=enter_solve_time, monitor=False, monitor_update_interval=0.5, save_every=enter_save_every, output_file=enter_write_solution_results, field_units=units_field, current_units=units_current)
-solution_zero_current = tdgl.solve(sc_device, tdgl_options, applied_vector_potential=B_applied_field, disorder_epsilon=track_epsilon)
 
-if MAKE_ANIMATIONS==True:
-    create_animation(input_file=enter_write_solution_results, output_file=enter_filename_animation, quantities=enter_quantities, fps=enter_fps, max_cols=2)
+if CONTINUE_SOLVING== True:
+    solution_previous= tdgl.Solution.from_hdf5(enter_filename_previous_solution)
+else:
+    solution_previous= None
+
+solution_zero_current = tdgl.solve(sc_device, tdgl_options, applied_vector_potential=B_applied_field, disorder_epsilon=track_epsilon, seed_solution=solution_previous)
 
 fig, axes= solution_zero_current.plot_order_parameter(squared=False)
 plt.suptitle(f"Order Parameter Plot after T={enter_solve_time}, "+ r"$B_{app}$="+f"{B_applied_field}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_london}{units_length}, $\\xi$={xi_coherence}{units_length})")
@@ -210,6 +223,14 @@ if show_xi_coherence_box==True:
     xi_coherence_box=box(width=(sc_film_length-xi_coherence))
     for ax in axes:
         ax.plot(*xi_coherence_box.T)
+
+plt.show()
+
+
+if MAKE_ANIMATIONS==True:
+    create_animation(input_file=enter_animation_input, output_file=enter_animation_output, quantities=enter_animation_quantities, fps=enter_fps, max_cols=2)
+    #create_animation(input_file=enter_write_solution_results, output_file=enter_animation_output, quantities=enter_animation_quantities, fps=enter_fps, max_cols=2)
+
 
 
 #postprocessing
@@ -250,4 +271,4 @@ for ax in axes:
     ax.plot(*reduced_simulation_surface.T)
 '''
 
-plt.show()
+#plt.show()
