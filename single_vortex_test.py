@@ -25,49 +25,51 @@ enter_xi_coherence = 10
 enter_lambda_london = 80
 enter_gamma_scattering = 1
 
-enter_B_applied_field = 0 #15
+enter_B_applied_field = 0
 
 enter_film_thickness = 1
 enter_film_length = 1000
-enter_film_width = enter_film_length
+enter_film_width = 1000
 
-make_notch_on_vertical = False
-enter_notch_length= 60
-enter_notch_max_heigth= 40
+make_notch_on_vertical = True
+enter_notch_length= 100
+enter_notch_max_heigth= 50
 enter_notch_orienation = "Right"
-enter_notch_placement_y = -0.0*enter_film_length/2
+enter_notch_placement_y = -0.5*enter_film_length/2
 
-make_hole = False
-enter_hole_radius = 5*enter_xi_coherence
-enter_hole_center = (0,0)
+make_hole = True
+enter_hole_radius = 6*enter_xi_coherence
+enter_hole_center = (0,50)
 
-make_track = False
-enter_track_width = 1*enter_xi_coherence
+make_track = True
+enter_track_width = 5*enter_xi_coherence
 enter_track_epsilon = 0.4
 
 MAKE_TERMINALS = True
 enter_source_width = enter_film_width
 enter_source_length = enter_film_length/100
-enter_dc_source = 50
+enter_dc_source = 60
 enter_dc_drain = -enter_dc_source
+enter_dc_background_factor = 0
+enter_pulse_length = 35
 enter_voltmeter_points = [(0, enter_film_length/2.5), (0, -enter_film_length/2.5)]
 
 CONTINUE_SOLVING = False
 enter_filename_previous_solution = None
-enter_max_edge_length = 2 * enter_xi_coherence  #mesh element size, should be small comped to xi_coherence
-enter_skip_time = 0
-enter_solve_time = 300
-enter_save_every = 100
-do_monitor = True
+enter_max_edge_length = 1.5 * enter_xi_coherence  #mesh element size, should be small comped to xi_coherence
+enter_skip_time = 5
+enter_solve_time = 250
+enter_save_every = 200
+do_monitor = False
 show_london_box=False
 show_xi_coherence_box=False
 
-MAKE_ANIMATIONS = False
+MAKE_ANIMATIONS = True
 enter_write_solution_results = "_tmp_h5_notchlf.h5"
 enter_animation_input = enter_write_solution_results
-enter_animation_output = "geom_notch_hole_track_lowe.gif"
+enter_animation_output = "transport_60_0ua_pulseT35.gif"
 enter_animation_quantities = ('order_parameter', 'phase', 'supercurrent', 'normal_current')
-enter_fps = 10
+enter_fps = 20
 
 ##############MAIN SIMULATION LOGIC STARTS BEYOND THIS POINT##############################
 
@@ -75,7 +77,15 @@ enter_fps = 10
 #parameters of the superconducting material to create SC layer
 xi_coherence= enter_xi_coherence #10
 lambda_london= enter_lambda_london #80
+kappa_gl= lambda_london/xi_coherence
+print(f"Material parameters at T=0: \n\tlambda={lambda_london}{units_length}, xi={xi_coherence}{units_length} (kappa= {kappa_gl}).")
 B_critical_thermo=(PHI0/(2*np.sqrt(2)*np.pi*lambda_london*ureg(units_length).to('m')*xi_coherence*ureg(units_length).to('m'))).to(units_field)
+print(f"Calculated with these values: \n\tB_c(thermo)= {B_critical_thermo:.4f}{units_field}")
+
+B_critical_lower=B_critical_thermo*np.log(kappa_gl)/(np.sqrt(2)*kappa_gl)
+B_critical_upper=np.sqrt(2)*kappa_gl*B_critical_thermo
+print(f"Calc using Bc: Bc(lower)= {B_critical_lower:.4f}, Bc(upper)= {B_critical_upper:.4f}")
+
 
 def recalc_characteristic_lengths(xi_coherence_0, lambda_london_0, B_critical_thermo_0):
     T_rel=0.95  #T/T_c
@@ -89,11 +99,17 @@ def recalc_characteristic_lengths(xi_coherence_0, lambda_london_0, B_critical_th
 
 if ADJUST_TO_NONZERO_T == True:
     lambda_london, xi_coherence, B_critical_thermo = recalc_characteristic_lengths(xi_coherence, lambda_london, B_critical_thermo)
+    kappa_gl= lambda_london/xi_coherence
+    print(f"Asymptotic corrections applied, values changed to: \n\tlambda= {lambda_london:.4f}, xi={xi_coherence:.4f} (kappa= {kappa_gl}), Bc(thermo)={B_critical_thermo:.4f}")
+    B_critical_lower=B_critical_thermo*np.log(kappa_gl)/(np.sqrt(2)*kappa_gl)
+    B_critical_upper=np.sqrt(2)*kappa_gl*B_critical_thermo
+    print(f"Calc using Bc: Bc(lower)= {B_critical_lower:.4f}, Bc(upper)= {B_critical_upper:.4f}")
+else:
+    print("Not adjusting these values! (ADJUST_TO_NONZERO_T != True)")
 
 
 d= enter_film_thickness
 gamma_scattering_gap = enter_gamma_scattering#1
-kappa_gl= lambda_london/xi_coherence
 lambda_eff_screening = lambda_london**2/xi_coherence
 sc_layer = tdgl.Layer(coherence_length=xi_coherence, london_lambda=lambda_london, thickness=d, gamma=gamma_scattering_gap)
 print(f"kappa= {kappa_gl}, screening length= {lambda_eff_screening}{units_length}, lambda= {lambda_london}{units_length}, coherence length={xi_coherence}{units_length}")
@@ -110,9 +126,6 @@ sc_film= tdgl.Polygon("film", points=box(width=sc_film_width, height=sc_film_len
 B_applied_field= enter_B_applied_field #60
 print(f"Applied magnetic field: {B_applied_field}{units_field}")
 
-B_critical_lower=B_critical_thermo*np.log(kappa_gl)/(np.sqrt(2)*kappa_gl)
-B_critical_upper=np.sqrt(2)*kappa_gl*B_critical_thermo
-print(f"Bc(thermo)= {B_critical_thermo}, Bc(lower)= {B_critical_lower}, Bc(upper)= {B_critical_upper}")
 #nr of vortices
 converted_B_applied_field=B_applied_field*ureg(units_field).to('T')
 converted_width_film=sc_film_width*ureg(units_length).to('m')
@@ -219,7 +232,16 @@ if MAKE_TERMINALS== True:
     terminal_source = tdgl.Polygon("source", points=box(enter_source_width, enter_source_length)).translate(dy=-1*sc_film_length/2)
     terminal_drain = terminal_source.scale(yfact=-1).set_name("drain")
     ncurrent_terminals= [terminal_source, terminal_drain]
-    supplied_ncurrent = dict(source=enter_dc_source, drain=enter_dc_drain)
+    #supplied_ncurrent = dict(source=enter_dc_source, drain=enter_dc_drain)
+    pulse_length = enter_pulse_length
+    dc_background_factor = enter_dc_background_factor
+
+    def dc_pulse(time):
+        if time<=pulse_length:
+            supplied_ncurrent = dict(source=enter_dc_source, drain=enter_dc_drain)
+        else:
+            supplied_ncurrent = dict(source=enter_dc_source*dc_background_factor, drain=enter_dc_drain*dc_background_factor)
+        return supplied_ncurrent
 else:
     ncurrent_terminals = []
     supplied_ncurrent = None
@@ -245,10 +267,10 @@ if CONTINUE_SOLVING== True:
 else:
     solution_previous= None
 
-solution_zero_current = tdgl.solve(sc_device, tdgl_options, applied_vector_potential=B_applied_field, disorder_epsilon=track_epsilon, terminal_currents=supplied_ncurrent, seed_solution=solution_previous)
+solution_zero_current = tdgl.solve(sc_device, tdgl_options, applied_vector_potential=B_applied_field, disorder_epsilon=track_epsilon, terminal_currents=dc_pulse, seed_solution=solution_previous)
 
 fig, axes= solution_zero_current.plot_order_parameter(squared=False)
-plt.suptitle(f"Order Parameter Plot after T={enter_solve_time}, "+ r"$B_{app}$="+f"{B_applied_field}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_london}{units_length}, $\\xi$={xi_coherence}{units_length})")
+plt.suptitle(f"Order Parameter Plot after T={enter_solve_time}, "+ r"$B_{app}$="+f"{B_applied_field}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_london:.4f}{units_length}, $\\xi$={xi_coherence:.4f}{units_length})")
 
 fig, axes= solution_zero_current.plot_scalar_potential()
 
