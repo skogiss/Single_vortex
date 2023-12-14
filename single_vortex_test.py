@@ -23,6 +23,7 @@ PHI0 = 2.06783e-15*ureg.T*ureg.m**2
 ADJUST_TO_NONZERO_T = True
 enter_xi_coherence = 10
 enter_lambda_london = 80
+enter_sigma_conductivity = 6.7e-3 #S/nm
 enter_gamma_scattering = 1
 
 enter_B_applied_field = 0
@@ -38,39 +39,46 @@ enter_notch_orienation = "Right"
 enter_notch_placement_y = -0.5*enter_film_length/2
 
 make_hole = True
-enter_hole_radius = 6*enter_xi_coherence
+AUTO_HOLE_RADIUS = True
+enter_hole_radius_factor = 2
+enter_hole_radius = 60
 enter_hole_center = (0,50)
 
 make_track = True
-enter_track_width = 5*enter_xi_coherence
+AUTO_TRACK_WIDTH = True
+enter_track_width_factor = 1
+enter_track_width = 50
 enter_track_epsilon = 0.4
 
 MAKE_TERMINALS = True
 enter_source_width = enter_film_width
-enter_source_length = enter_film_length/100
+enter_source_length = enter_film_width/100
 enter_dc_source = 60
 enter_dc_drain = -enter_dc_source
-enter_dc_background_factor = 0
+enter_dc_background_factor = 0.1
 enter_pulse_length = 35
 enter_voltmeter_points = [(0, enter_film_length/2.5), (0, -enter_film_length/2.5)]
 
 CONTINUE_SOLVING = False
-enter_filename_previous_solution = None
-enter_max_edge_length = 1.5 * enter_xi_coherence  #mesh element size, should be small comped to xi_coherence
-enter_skip_time = 5
-enter_solve_time = 250
+enter_filename_previous_solution = None#"_tmp_h5_notchlf.h5"
+AUTO_MESH_EDGE = True
+enter_max_edge_factor = 1
+enter_max_edge_length = 15  #mesh element size, should be small comped to xi_coherence
+enter_skip_time = 0
+enter_solve_time = 200
 enter_save_every = 200
-do_monitor = False
+do_monitor = True
 show_london_box=False
 show_xi_coherence_box=False
 
-MAKE_ANIMATIONS = True
-enter_write_solution_results = "_tmp_h5_notchlf.h5"
+MAKE_ANIMATIONS = False
+enter_write_solution_results = "solution_pulse_bckgr_trap.h5"#"_tmp_h5_notchlf3.h5"
 enter_animation_input = enter_write_solution_results
-enter_animation_output = "transport_60_0ua_pulseT35.gif"
+enter_animation_output = "transport_60ua_constantDC_continued_6ua.gif"
 enter_animation_quantities = ('order_parameter', 'phase', 'supercurrent', 'normal_current')
-enter_fps = 20
+enter_fps = 15
 
+print("---------------------------")
 ##############MAIN SIMULATION LOGIC STARTS BEYOND THIS POINT##############################
 
 
@@ -78,13 +86,14 @@ enter_fps = 20
 xi_coherence= enter_xi_coherence #10
 lambda_london= enter_lambda_london #80
 kappa_gl= lambda_london/xi_coherence
-print(f"Material parameters at T=0: \n\tlambda={lambda_london}{units_length}, xi={xi_coherence}{units_length} (kappa= {kappa_gl}).")
+sigma_conductivity=enter_sigma_conductivity
+print(f"Material parameters at T=0: lambda={lambda_london}{units_length}, xi={xi_coherence}{units_length} (kappa= {kappa_gl}).")
 B_critical_thermo=(PHI0/(2*np.sqrt(2)*np.pi*lambda_london*ureg(units_length).to('m')*xi_coherence*ureg(units_length).to('m'))).to(units_field)
-print(f"Calculated with these values: \n\tB_c(thermo)= {B_critical_thermo:.4f}{units_field}")
+print(f"Calculated with these values: B_c(thermo)= {B_critical_thermo:.4f}")
 
 B_critical_lower=B_critical_thermo*np.log(kappa_gl)/(np.sqrt(2)*kappa_gl)
 B_critical_upper=np.sqrt(2)*kappa_gl*B_critical_thermo
-print(f"Calc using Bc: Bc(lower)= {B_critical_lower:.4f}, Bc(upper)= {B_critical_upper:.4f}")
+print(f"Calc from Bc: Bc(lower)= {B_critical_lower:.4f}, Bc(upper)= {B_critical_upper:.4f}")
 
 
 def recalc_characteristic_lengths(xi_coherence_0, lambda_london_0, B_critical_thermo_0):
@@ -100,51 +109,40 @@ def recalc_characteristic_lengths(xi_coherence_0, lambda_london_0, B_critical_th
 if ADJUST_TO_NONZERO_T == True:
     lambda_london, xi_coherence, B_critical_thermo = recalc_characteristic_lengths(xi_coherence, lambda_london, B_critical_thermo)
     kappa_gl= lambda_london/xi_coherence
-    print(f"Asymptotic corrections applied, values changed to: \n\tlambda= {lambda_london:.4f}, xi={xi_coherence:.4f} (kappa= {kappa_gl}), Bc(thermo)={B_critical_thermo:.4f}")
+    print(f"Temperature corrections applied, new values: lambda= {lambda_london:.4f}, xi={xi_coherence:.4f} (kappa= {kappa_gl}), Bc(thermo)={B_critical_thermo:.4f}")
     B_critical_lower=B_critical_thermo*np.log(kappa_gl)/(np.sqrt(2)*kappa_gl)
     B_critical_upper=np.sqrt(2)*kappa_gl*B_critical_thermo
-    print(f"Calc using Bc: Bc(lower)= {B_critical_lower:.4f}, Bc(upper)= {B_critical_upper:.4f}")
+    print(f"Recalculated critical fields: Bc(lower)= {B_critical_lower:.4f}, Bc(upper)= {B_critical_upper:.4f} \n---------------------------")
 else:
-    print("Not adjusting these values! (ADJUST_TO_NONZERO_T != True)")
+    print("Not applying temperature corrections \n---------------------------")
 
 
 d= enter_film_thickness
 gamma_scattering_gap = enter_gamma_scattering#1
 lambda_eff_screening = lambda_london**2/xi_coherence
-sc_layer = tdgl.Layer(coherence_length=xi_coherence, london_lambda=lambda_london, thickness=d, gamma=gamma_scattering_gap)
-print(f"kappa= {kappa_gl}, screening length= {lambda_eff_screening}{units_length}, lambda= {lambda_london}{units_length}, coherence length={xi_coherence}{units_length}")
-
+sc_layer = tdgl.Layer(coherence_length=xi_coherence, london_lambda=lambda_london, thickness=d, gamma=gamma_scattering_gap, conductivity=sigma_conductivity)
+#print(f"kappa= {kappa_gl}, screening length= {lambda_eff_screening}{units_length}, lambda= {lambda_london}{units_length}, coherence length={xi_coherence}{units_length}")
 
 #outer geometry of the SC film
 sc_film_length = enter_film_length #1000
 sc_film_width = enter_film_width
 
 sc_film= tdgl.Polygon("film", points=box(width=sc_film_width, height=sc_film_length))
-
-#critical fields
-#parameters of environment
-B_applied_field= enter_B_applied_field #60
-print(f"Applied magnetic field: {B_applied_field}{units_field}")
-
-#nr of vortices
-converted_B_applied_field=B_applied_field*ureg(units_field).to('T')
-converted_width_film=sc_film_width*ureg(units_length).to('m')
-converted_length_film=sc_film_length*ureg(units_length).to('m')
-print(f"PHI0= {PHI0}, B_applied_field_T: {converted_B_applied_field}, film length: {converted_width_film}")
-fluxoid_theoretic = (converted_B_applied_field*converted_width_film*converted_length_film)/PHI0
-print(f"Vortices that can enter: {fluxoid_theoretic}")
+print(f"Superconducting layer created, dimensions: {sc_film_length}x{sc_film_length}x{d} {units_length}")
 
 #notch geometry
 notch_length= enter_notch_length
 notch_max_heigth= enter_notch_max_heigth
 notch_placement_y = enter_notch_placement_y
 
+notch_orientation = enter_notch_orienation
 def create_notch(notch_length, notch_max_heigth, notch_placement_y):
     hole_notch=tdgl.Polygon("notch test", points=ellipse(a=notch_length,b=notch_max_heigth/2))
     notch_placement_x = sc_film_width/2
-    if enter_notch_orienation == "Left":
+    if notch_orientation == "Left":
         notch_placement_x = (-1)*notch_placement_x
     hole_notch=hole_notch.translate(dx=notch_placement_x, dy=notch_placement_y)
+    print(f"Making notch in y={notch_placement_y} ({notch_orientation} edge)")
     return hole_notch
 
 
@@ -154,18 +152,24 @@ if make_notch_on_vertical == True:
     sc_film= sc_film.difference(notch_in_film1).resample(400).buffer(0)
 
 #geometry of circular hole
-hole_radius = enter_hole_radius
 hole_center = enter_hole_center
+if AUTO_HOLE_RADIUS == True:
+    hole_radius = enter_hole_radius_factor * xi_coherence
+else:
+    hole_radius = enter_hole_radius
 
 def create_hole_round(hole_center, hole_radius):
     hole_round = tdgl.Polygon("round hole", points=circle(radius=hole_radius, center=hole_center))
+    print(f"Hole created at {hole_center}, r= {hole_radius}")
     return hole_round
 
 if make_hole== True:
     hole_round= create_hole_round(hole_center, hole_radius)
     holes_in_film= [hole_round]
+    print("Hole added to SC sheet")
 else:
     holes_in_film=[]
+    print("No holes added to SC sheet")
 
 #track geometry
 def create_track(track_width, notch_in_film, center_of_hole):
@@ -197,8 +201,7 @@ def create_track(track_width, notch_in_film, center_of_hole):
             track_notch_gap_x = notch_endpoint[0] - track.bbox[1][0]
 
     track=track.translate(dx=track_notch_gap_x,dy=track_notch_gap_y).difference(hole_round).resample(800)
-    print(f"track box: {track.bbox}")
-    print(f"notch endpoint: {notch_endpoint}, track length: {track_length}, track angle: {track_angle}")
+    print(f"Track between hole center and {notch_endpoint}, length: {track_length}, angle: {track_angle}")
     return track
 
 if make_track==True:
@@ -209,9 +212,15 @@ if make_track==True:
             return epsilon
 
     elif make_hole==True:
-        track_width = enter_track_width
+        if AUTO_TRACK_WIDTH == True:
+            track_width=enter_track_width_factor*xi_coherence
+        else:
+            track_width = enter_track_width
         track=create_track(track_width, notch_in_film1, hole_center)
         #track dependent disorder_epsilon
+        #track_epsilon=enter_track_epsilon
+        print(f"Track width={track_width}, epsilon in track= {enter_track_epsilon}")
+
         def track_epsilon(r):
             if track.contains_points(r)==True or track.on_boundary(r)==True:
                 epsilon=enter_track_epsilon
@@ -219,45 +228,68 @@ if make_track==True:
                 epsilon=1.0
             return epsilon
 else:
+    print("Track not created")
     def track_epsilon(r):
         epsilon=1
         return epsilon
 
+print("---------------------------")
 
-#output about simulation geometry
-print(f"Dimensions of the SC film: {sc_film_length}x{sc_film_length}{units_length}")
+#parameters of environment
+B_applied_field= enter_B_applied_field #60
+print(f"Applied magnetic field: {B_applied_field}{units_field}")
+
+#nr of vortices
+converted_B_applied_field=B_applied_field*ureg(units_field).to('T')
+converted_width_film=sc_film_width*ureg(units_length).to('m')
+converted_length_film=sc_film_length*ureg(units_length).to('m')
+#print(f"PHI0= {PHI0}, B_applied_field_T: {converted_B_applied_field}, film length: {converted_width_film}")
+fluxoid_theoretic = (converted_B_applied_field*converted_width_film*converted_length_film)/PHI0
+#print(f"Vortices that can enter: {fluxoid_theoretic}")
 
 #External current terminals
 if MAKE_TERMINALS== True:
-    terminal_source = tdgl.Polygon("source", points=box(enter_source_width, enter_source_length)).translate(dy=-1*sc_film_length/2)
+    source_width=enter_source_width
+    source_length=enter_source_length
+    terminal_source = tdgl.Polygon("source", points=box(source_width, source_length)).translate(dy=-1*sc_film_length/2)
     terminal_drain = terminal_source.scale(yfact=-1).set_name("drain")
     ncurrent_terminals= [terminal_source, terminal_drain]
+    print(f"Two {source_width}x{source_length} current terminals added")
     #supplied_ncurrent = dict(source=enter_dc_source, drain=enter_dc_drain)
+    dc_source=enter_dc_source
+    dc_drain=enter_dc_drain
     pulse_length = enter_pulse_length
     dc_background_factor = enter_dc_background_factor
+    print(f"Supplied source current: {dc_source}{units_current} (drain current = {dc_drain}{units_current}). DC pulse length: {pulse_length} (dimensionless)")
 
     def dc_pulse(time):
         if time<=pulse_length:
-            supplied_ncurrent = dict(source=enter_dc_source, drain=enter_dc_drain)
+            supplied_ncurrent = dict(source=dc_source, drain=dc_drain)
         else:
-            supplied_ncurrent = dict(source=enter_dc_source*dc_background_factor, drain=enter_dc_drain*dc_background_factor)
+            supplied_ncurrent = dict(source=dc_source*dc_background_factor, drain=dc_drain*dc_background_factor)
         return supplied_ncurrent
 else:
     ncurrent_terminals = []
     supplied_ncurrent = None
-
+    print("No current terminals added")
 
 #put SC material (tdgl.Layer) and geometry (tdgl.Polygon) together into a complete device (tdgl.Device)
 sc_device= tdgl.Device("square with hole", layer=sc_layer, film=sc_film, holes=holes_in_film, terminals=ncurrent_terminals, probe_points=enter_voltmeter_points, length_units=units_length)
-#discretize the device into a mesh to be solved over
+tau0_time = sc_device.tau0()
+print(f"tau0 factor for time in seconds: {tau0_time}")
 
-sc_device.make_mesh(max_edge_length=enter_max_edge_length, smooth=1) #smooth 1 or 100 had very little effect on how the mesh looks
-#fig, ax = sc_device.plot(mesh=True, legend=False)
+
+#discretize the device into a mesh to be solved over
+if AUTO_MESH_EDGE == True:
+    mesh_edge_length = enter_max_edge_factor * xi_coherence
+else:
+    mesh_edge_length = enter_max_edge_length
+print(f"Max length of mesh edge set to {mesh_edge_length}")
+print("---------------------------")
+sc_device.make_mesh(max_edge_length=mesh_edge_length, smooth=1) #smooth 1 or 100 had very little effect on how the mesh looks
+#fig, ax = sc_device.plot(mesh=True, legend=True)
 #fig, ax= sc_device.draw()
 #plt.show()
-
-
-
 
 #solve TDGL
 tdgl_options = tdgl.SolverOptions(skip_time=enter_skip_time, solve_time=enter_solve_time, monitor=do_monitor, monitor_update_interval=0.5, save_every=enter_save_every, output_file=enter_write_solution_results, field_units=units_field, current_units=units_current)
@@ -284,7 +316,6 @@ if show_xi_coherence_box==True:
         ax.plot(*xi_coherence_box.T)
 
 #plt.show()
-
 
 if MAKE_ANIMATIONS==True:
     create_animation(input_file=enter_animation_input, output_file=enter_animation_output, quantities=enter_animation_quantities, fps=enter_fps, max_cols=2)
