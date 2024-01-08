@@ -13,6 +13,7 @@ from tdgl.solution import data
 from pint import UnitRegistry
 ureg=UnitRegistry()
 
+#np.set_printoptions(threshold=sys.maxsize)
 #units to be used throughout the simulation
 units_length="nm"
 units_field="mT"
@@ -29,54 +30,54 @@ enter_gamma_scattering = 1
 enter_B_applied_field = 0
 
 enter_film_thickness = 1
-enter_film_length = 1000
+enter_film_length = 2000
 enter_film_width = 1000
 
 make_notch_on_vertical = True
-enter_notch_length= 100
-enter_notch_max_heigth= 50
+enter_notch_length= 140
+enter_notch_max_heigth= 80
 enter_notch_orienation = "Right"
-enter_notch_placement_y = -0.5*enter_film_length/2
+enter_notch_placement_y = -0.7*enter_film_length/2
 
 make_hole = True
 AUTO_HOLE_RADIUS = True
 enter_hole_radius_factor = 2
 enter_hole_radius = 60
-enter_hole_center = (0,50)
+enter_hole_center = (0,0)
 
 make_track = True
-AUTO_TRACK_WIDTH = True
-enter_track_width_factor = 1
-enter_track_width = 50
+AUTO_TRACK_WIDTH = False
+enter_track_width_factor = 2.5
+enter_track_width = 120
 enter_track_epsilon = 0.4
 
 MAKE_TERMINALS = True
 enter_source_width = enter_film_width
 enter_source_length = enter_film_width/100
-enter_dc_source = 60
+enter_dc_source = 50
 enter_dc_drain = -enter_dc_source
-enter_dc_background_factor = 0.1
-enter_pulse_length = 35
+enter_dc_background_factor = 0
+enter_pulse_length = 60
 enter_voltmeter_points = [(0, enter_film_length/2.5), (0, -enter_film_length/2.5)]
 
 CONTINUE_SOLVING = False
 enter_filename_previous_solution = None#"_tmp_h5_notchlf.h5"
 AUTO_MESH_EDGE = True
-enter_max_edge_factor = 1
+enter_max_edge_factor = 0.6
 enter_max_edge_length = 15  #mesh element size, should be small comped to xi_coherence
 enter_skip_time = 0
-enter_solve_time = 200
+enter_solve_time = 90
 enter_save_every = 200
 do_monitor = True
 show_london_box=False
 show_xi_coherence_box=False
 
 MAKE_ANIMATIONS = False
-enter_write_solution_results = "solution_pulse_bckgr_trap.h5"#"_tmp_h5_notchlf3.h5"
+enter_write_solution_results = None#"h5_dc_track130.h5"
 enter_animation_input = enter_write_solution_results
-enter_animation_output = "transport_60ua_constantDC_continued_6ua.gif"
+enter_animation_output = "dc_study_track_130.mp4"
 enter_animation_quantities = ('order_parameter', 'phase', 'supercurrent', 'normal_current')
-enter_fps = 15
+enter_fps = 30
 
 print("---------------------------")
 ##############MAIN SIMULATION LOGIC STARTS BEYOND THIS POINT##############################
@@ -146,10 +147,12 @@ def create_notch(notch_length, notch_max_heigth, notch_placement_y):
     return hole_notch
 
 
-#create a notch and optionally add it to film
-notch_in_film1=create_notch(notch_length, notch_max_heigth, notch_placement_y)
+#create a notch and  add it to film
 if make_notch_on_vertical == True:
+    notch_in_film1=create_notch(notch_length, notch_max_heigth, notch_placement_y)
     sc_film= sc_film.difference(notch_in_film1).resample(400).buffer(0)
+else:
+    print("No notch in SC sheet")
 
 #geometry of circular hole
 hole_center = enter_hole_center
@@ -175,7 +178,11 @@ else:
 def create_track(track_width, notch_in_film, center_of_hole):
     #hole_notch=notch_in_film1.difference(tdgl.Polygon(points=box(width=notch_ellipse_big,height=2*notch_ellipse_small)).translate(dx=notch_ellipse_big/2))
     tmp_coord_notch = notch_in_film.bbox
-    notch_endpoint = (tmp_coord_notch[0][0], (tmp_coord_notch[0][1]+(tmp_coord_notch[1][1]-tmp_coord_notch[0][1])/2))
+    #notch_endpoint = (tmp_coord_notch[0][0], (tmp_coord_notch[0][1]+(tmp_coord_notch[1][1]-tmp_coord_notch[0][1])/2)) #original
+    if notch_placement_y<=0:
+        notch_endpoint = ((tmp_coord_notch[0][0]+(tmp_coord_notch[1][0]-tmp_coord_notch[0][0])/4), (tmp_coord_notch[0][1])) #works for notch below hole
+    elif notch_placement_y>0:
+        notch_endpoint = ((tmp_coord_notch[0][0]+(tmp_coord_notch[1][0]-tmp_coord_notch[0][0])/4), (tmp_coord_notch[1][1])) #works for notch above hole
     track_length = np.sqrt((notch_endpoint[0]-center_of_hole[0])**2 + (notch_endpoint[1]-center_of_hole[1])**2)
     adjacent_side_length = center_of_hole[1]-notch_endpoint[1]
     opposite_side_length = center_of_hole[0]-notch_endpoint[0]
@@ -200,7 +207,7 @@ def create_track(track_width, notch_in_film, center_of_hole):
             track_notch_gap_y = notch_endpoint[1] - track.bbox[1][1] #same bbox coordinates rotate too
             track_notch_gap_x = notch_endpoint[0] - track.bbox[1][0]
 
-    track=track.translate(dx=track_notch_gap_x,dy=track_notch_gap_y).difference(hole_round).resample(800)
+    track=track.translate(dx=track_notch_gap_x,dy=track_notch_gap_y).resample(800)#.difference(hole_round).resample(800) #OBS! Re-add difference if needed
     print(f"Track between hole center and {notch_endpoint}, length: {track_length}, angle: {track_angle}")
     return track
 
@@ -222,13 +229,14 @@ if make_track==True:
         print(f"Track width={track_width}, epsilon in track= {enter_track_epsilon}")
 
         def track_epsilon(r):
+            track_epsilon.track_points = track.points #to be able to access later
             if track.contains_points(r)==True or track.on_boundary(r)==True:
                 epsilon=enter_track_epsilon
             else:
                 epsilon=1.0
             return epsilon
 else:
-    print("Track not created")
+    print("No track on SC sheet")
     def track_epsilon(r):
         epsilon=1
         return epsilon
@@ -251,7 +259,7 @@ fluxoid_theoretic = (converted_B_applied_field*converted_width_film*converted_le
 if MAKE_TERMINALS== True:
     source_width=enter_source_width
     source_length=enter_source_length
-    terminal_source = tdgl.Polygon("source", points=box(source_width, source_length)).translate(dy=-1*sc_film_length/2)
+    terminal_source = tdgl.Polygon("source", points=box(source_width, source_length)).translate(dy=1*sc_film_length/2)
     terminal_drain = terminal_source.scale(yfact=-1).set_name("drain")
     ncurrent_terminals= [terminal_source, terminal_drain]
     print(f"Two {source_width}x{source_length} current terminals added")
@@ -262,11 +270,14 @@ if MAKE_TERMINALS== True:
     dc_background_factor = enter_dc_background_factor
     print(f"Supplied source current: {dc_source}{units_current} (drain current = {dc_drain}{units_current}). DC pulse length: {pulse_length} (dimensionless)")
 
+    initialization_time = 5
     def dc_pulse(time):
-        if time<=pulse_length:
+        if time<=initialization_time:
+            supplied_ncurrent= dict(source=0, drain=0) #first 5tau no current to be able to locate track in postprocess
+        if time>initialization_time and time<=(pulse_length+initialization_time):
             supplied_ncurrent = dict(source=dc_source, drain=dc_drain)
         else:
-            supplied_ncurrent = dict(source=dc_source*dc_background_factor, drain=dc_drain*dc_background_factor)
+            supplied_ncurrent = dict(source=0, drain=0)
         return supplied_ncurrent
 else:
     ncurrent_terminals = []
@@ -287,7 +298,7 @@ else:
 print(f"Max length of mesh edge set to {mesh_edge_length}")
 print("---------------------------")
 sc_device.make_mesh(max_edge_length=mesh_edge_length, smooth=1) #smooth 1 or 100 had very little effect on how the mesh looks
-#fig, ax = sc_device.plot(mesh=True, legend=True)
+fig, ax = sc_device.plot(mesh=True, legend=True)
 #fig, ax= sc_device.draw()
 #plt.show()
 
@@ -304,7 +315,14 @@ solution_zero_current = tdgl.solve(sc_device, tdgl_options, applied_vector_poten
 fig, axes= solution_zero_current.plot_order_parameter(squared=False)
 plt.suptitle(f"Order Parameter Plot after T={enter_solve_time}, "+ r"$B_{app}$="+f"{B_applied_field}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_london:.4f}{units_length}, $\\xi$={xi_coherence:.4f}{units_length})")
 
-fig, axes= solution_zero_current.plot_scalar_potential()
+#visualization of fluxoid calculation areas
+r_fluxoid_calc_surface = 1.5*hole_radius
+center_fluxoid_calc_surface = hole_center
+fluxoid_calc_surface = circle(radius=r_fluxoid_calc_surface, center=center_fluxoid_calc_surface, points=201)
+fluxoid_in_surface = solution_zero_current.polygon_fluxoid(fluxoid_calc_surface, with_units=False)
+print(f"Fluxoid over outlined area: \n\t{fluxoid_in_surface} Phi_0 \n\tTotal fluxoid over outlined area: {sum(fluxoid_in_surface):.2f} Phi_0 \n")
+for ax in axes:
+    ax.plot(*fluxoid_calc_surface.T)
 
 if show_london_box==True:
     london_box=box(width=(sc_film_length-lambda_london))
@@ -315,24 +333,22 @@ if show_xi_coherence_box==True:
     for ax in axes:
         ax.plot(*xi_coherence_box.T)
 
-#plt.show()
+plt.show()
 
 if MAKE_ANIMATIONS==True:
     create_animation(input_file=enter_animation_input, output_file=enter_animation_output, quantities=enter_animation_quantities, fps=enter_fps, max_cols=2)
     #create_animation(input_file=enter_write_solution_results, output_file=enter_animation_output, quantities=enter_animation_quantities, fps=enter_fps, max_cols=2)
 
-
+#vortex_movement_current = tdgl.get_current_through_paths(enter_write_solution_results, paths=track.points, dataset="normal_current", units=units_current)
+#print(f"{vortex_movement_current}")
 
 #postprocessing
 
 #Determine how many vortices over area
-'''
-r_fluxoid_calc_surface = 2*hole_radius
-center_fluxoid_calc_surface = (0,0)
-fluxoid_calc_surface = circle(radius=r_fluxoid_calc_surface, center=center_fluxoid_calc_surface, points=201)
-fluxoid_in_surface = solution_zero_current.polygon_fluxoid(fluxoid_calc_surface, with_units=False)
-print(f"Fluxoid over outlined area: \n\t{fluxoid_in_surface} Phi_0 \n\tTotal fluxoid over outlined area: {sum(fluxoid_in_surface):.2f} Phi_0 \n")
+
+
 #Determine how many vortices through the entire film area, incl hole
+'''
 scale_sc_film_by = 0.99  #must be lower than 1 because fluxoid calculation area has to be smaller than sc_film
 reduced_simulation_surface = sc_film.scale(xfact=scale_sc_film_by, yfact=scale_sc_film_by).points
 fluxoid_in_simulation_area = solution_zero_current.polygon_fluxoid(reduced_simulation_surface, with_units=False)
@@ -340,27 +356,25 @@ print(f"Fluxoid over entire simulation area: \n\t{fluxoid_in_simulation_area} Ph
 '''
 
 '''
+
 #output and visualization of order parameter
 fig, axes = solution_zero_current.plot_order_parameter()
 plt.suptitle("Order Parameter Plot", fontsize=16)
 subtitle = f"B_applied_field = {B_applied_field} {units_field}"
 plt.title(subtitle, fontsize=12)
 
-file_name=f"figure_plots/phi_order-B_{B_applied_field}{units_field}_hole{hole_radius}{units_length}.png"
-#plt.savefig(file_name)
-'''
-#output and visualization of current density
-fig, ax = solution_zero_current.plot_currents(min_stream_amp=0.075, vmin=0, vmax=10)
-
-'''
-file_name=f"figure_plots/K_current-B_{B_applied_field}{units_field}_hole{hole_radius}{units_length}.png"
-plt.savefig(file_name)
-
-
 #visualization of fluxoid calculation areas
 for ax in axes:
     ax.plot(*fluxoid_calc_surface.T)
-    ax.plot(*reduced_simulation_surface.T)
-'''
+    #ax.plot(*reduced_simulation_surface.T)
 
-plt.show()
+file_name=f"figure_plots/phi_order-B_{B_applied_field}{units_field}_hole{hole_radius}{units_length}.png"
+#plt.savefig(file_name)
+
+#output and visualization of current density
+fig, ax = solution_zero_current.plot_currents(min_stream_amp=0.075, vmin=0, vmax=10)
+
+
+file_name=f"figure_plots/K_current-B_{B_applied_field}{units_field}_hole{hole_radius}{units_length}.png"
+plt.savefig(file_name)
+'''
