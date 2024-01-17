@@ -34,10 +34,10 @@ enter_film_length = 2000
 enter_film_width = 1000
 
 make_notch_on_vertical = True
-enter_notch_length= 140
-enter_notch_max_heigth= 80
+enter_notch_length= 110
+enter_notch_max_heigth= 110
 enter_notch_orienation = "Right"
-enter_notch_placement_y = -0.7*enter_film_length/2
+enter_notch_placement_y = 0*enter_film_length/2
 
 make_hole = True
 AUTO_HOLE_RADIUS = True
@@ -45,45 +45,50 @@ enter_hole_radius_factor = 2
 enter_hole_radius = 60
 enter_hole_center = (0,0)
 
-make_track = True
+make_track = False
 AUTO_TRACK_WIDTH = False
 enter_track_width_factor = 2.5
-enter_track_width = 120
+enter_track_width = 170
 enter_track_epsilon = 0.4
 
 MAKE_TERMINALS = True
 enter_source_width = enter_film_width
 enter_source_length = enter_film_width/100
-enter_dc_source = 50
+enter_initialization_time = 0
+CURRENT_MODE = "constant" #"constant" or "pulse"
+enter_dc_source = 51.2421875
 enter_dc_drain = -enter_dc_source
-enter_dc_background_factor = 0
-enter_pulse_length = 60
+#enter_dc_background_factor = 0
+enter_pulse_on_length = 27
+enter_pulse_on_zero_length = 30
+enter_pulse_off_length = 12
+enter_pulse_off_zero_length = 15
 enter_voltmeter_points = [(0, enter_film_length/2.5), (0, -enter_film_length/2.5)]
 
 CONTINUE_SOLVING = False
-enter_filename_previous_solution = None#"_tmp_h5_notchlf.h5"
+enter_filename_previous_solution = None#"h5_on_wtrack170_y06.h5"
 AUTO_MESH_EDGE = True
 enter_max_edge_factor = 0.6
-enter_max_edge_length = 15  #mesh element size, should be small comped to xi_coherence
+enter_max_edge_length = 15  #mesh element size, should be small compared to xi_coherence
 enter_skip_time = 0
-enter_solve_time = 90
-enter_save_every = 200
+enter_solve_time = 2000
+enter_save_every = 400
 do_monitor = True
 show_london_box=False
 show_xi_coherence_box=False
 
 MAKE_ANIMATIONS = False
-enter_write_solution_results = None#"h5_dc_track130.h5"
+enter_write_solution_results = None#"h5_hole2xi_AC_vortex_coming_back.h5"
 enter_animation_input = enter_write_solution_results
-enter_animation_output = "dc_study_track_130.mp4"
+enter_animation_output = "trap_bad_hole2xi_AC_vortex_coming_back.mp4"
 enter_animation_quantities = ('order_parameter', 'phase', 'supercurrent', 'normal_current')
-enter_fps = 30
+enter_fps = 15
 
 print("---------------------------")
 ##############MAIN SIMULATION LOGIC STARTS BEYOND THIS POINT##############################
 
 
-#parameters of the superconducting material to create SC layer
+#parameters of the superconducting material and creation of the SC layer (tdgl.Layer)
 xi_coherence= enter_xi_coherence #10
 lambda_london= enter_lambda_london #80
 kappa_gl= lambda_london/xi_coherence
@@ -118,18 +123,18 @@ else:
     print("Not applying temperature corrections \n---------------------------")
 
 
-d= enter_film_thickness
+film_thickness = enter_film_thickness
 gamma_scattering_gap = enter_gamma_scattering#1
 lambda_eff_screening = lambda_london**2/xi_coherence
-sc_layer = tdgl.Layer(coherence_length=xi_coherence, london_lambda=lambda_london, thickness=d, gamma=gamma_scattering_gap, conductivity=sigma_conductivity)
-#print(f"kappa= {kappa_gl}, screening length= {lambda_eff_screening}{units_length}, lambda= {lambda_london}{units_length}, coherence length={xi_coherence}{units_length}")
+sc_layer = tdgl.Layer(coherence_length=xi_coherence, london_lambda=lambda_london, thickness=film_thickness, gamma=gamma_scattering_gap, conductivity=sigma_conductivity)
 
-#outer geometry of the SC film
+
+#outer geometry of the SC film including domain size, notch, hole, track (tdgl.Polygon)
 sc_film_length = enter_film_length #1000
 sc_film_width = enter_film_width
 
 sc_film= tdgl.Polygon("film", points=box(width=sc_film_width, height=sc_film_length))
-print(f"Superconducting layer created, dimensions: {sc_film_length}x{sc_film_length}x{d} {units_length}")
+print(f"Superconducting layer created, dimensions: {sc_film_length}x{sc_film_length}x{film_thickness} {units_length}")
 
 #notch geometry
 notch_length= enter_notch_length
@@ -179,10 +184,13 @@ def create_track(track_width, notch_in_film, center_of_hole):
     #hole_notch=notch_in_film1.difference(tdgl.Polygon(points=box(width=notch_ellipse_big,height=2*notch_ellipse_small)).translate(dx=notch_ellipse_big/2))
     tmp_coord_notch = notch_in_film.bbox
     #notch_endpoint = (tmp_coord_notch[0][0], (tmp_coord_notch[0][1]+(tmp_coord_notch[1][1]-tmp_coord_notch[0][1])/2)) #original
-    if notch_placement_y<=0:
-        notch_endpoint = ((tmp_coord_notch[0][0]+(tmp_coord_notch[1][0]-tmp_coord_notch[0][0])/4), (tmp_coord_notch[0][1])) #works for notch below hole
+    if notch_placement_y<0:
+    	notch_endpoint = ((tmp_coord_notch[0][0]+(tmp_coord_notch[1][0]-tmp_coord_notch[0][0])/4), (tmp_coord_notch[0][1])) #works for notch below hole
+    elif notch_placement_y==0:
+        notch_endpoint = (tmp_coord_notch[0][0], (tmp_coord_notch[0][1]+(tmp_coord_notch[1][1]-tmp_coord_notch[0][1])/2)) #original
     elif notch_placement_y>0:
         notch_endpoint = ((tmp_coord_notch[0][0]+(tmp_coord_notch[1][0]-tmp_coord_notch[0][0])/4), (tmp_coord_notch[1][1])) #works for notch above hole
+
     track_length = np.sqrt((notch_endpoint[0]-center_of_hole[0])**2 + (notch_endpoint[1]-center_of_hole[1])**2)
     adjacent_side_length = center_of_hole[1]-notch_endpoint[1]
     opposite_side_length = center_of_hole[0]-notch_endpoint[0]
@@ -207,13 +215,13 @@ def create_track(track_width, notch_in_film, center_of_hole):
             track_notch_gap_y = notch_endpoint[1] - track.bbox[1][1] #same bbox coordinates rotate too
             track_notch_gap_x = notch_endpoint[0] - track.bbox[1][0]
 
-    track=track.translate(dx=track_notch_gap_x,dy=track_notch_gap_y).resample(800)#.difference(hole_round).resample(800) #OBS! Re-add difference if needed
+    track=track.translate(dx=track_notch_gap_x+50,dy=track_notch_gap_y-30).resample(800)#.difference(hole_round).resample(800) #OBS! Re-add difference if needed
     print(f"Track between hole center and {notch_endpoint}, length: {track_length}, angle: {track_angle}")
     return track
 
 if make_track==True:
-    if not make_hole==True:
-        print("WARNING! Can't create track because there are no holes. Constant epsilon_disorder will be set.")
+    if not (make_hole==True and make_notch_on_vertical==True):
+        print("WARNING! Can't create track because hole, notch or both are missing. Constant epsilon_disorder will be set.")
         def track_epsilon(r):
             epsilon=1
             return epsilon
@@ -229,7 +237,7 @@ if make_track==True:
         print(f"Track width={track_width}, epsilon in track= {enter_track_epsilon}")
 
         def track_epsilon(r):
-            track_epsilon.track_points = track.points #to be able to access later
+            track_epsilon.track_points = track.points #to be able to access track coordinates from saved solution later
             if track.contains_points(r)==True or track.on_boundary(r)==True:
                 epsilon=enter_track_epsilon
             else:
@@ -247,13 +255,14 @@ print("---------------------------")
 B_applied_field= enter_B_applied_field #60
 print(f"Applied magnetic field: {B_applied_field}{units_field}")
 
-#nr of vortices
-converted_B_applied_field=B_applied_field*ureg(units_field).to('T')
-converted_width_film=sc_film_width*ureg(units_length).to('m')
-converted_length_film=sc_film_length*ureg(units_length).to('m')
-#print(f"PHI0= {PHI0}, B_applied_field_T: {converted_B_applied_field}, film length: {converted_width_film}")
-fluxoid_theoretic = (converted_B_applied_field*converted_width_film*converted_length_film)/PHI0
-#print(f"Vortices that can enter: {fluxoid_theoretic}")
+#nr of vortices that should enter given this field
+if B_applied_field!=0:
+    converted_B_applied_field=B_applied_field*ureg(units_field).to('T')
+    converted_width_film=sc_film_width*ureg(units_length).to('m')
+    converted_length_film=sc_film_length*ureg(units_length).to('m')
+    #print(f"PHI0= {PHI0}, B_applied_field_T: {converted_B_applied_field}, film length: {converted_width_film}")
+    fluxoid_theoretic = (converted_B_applied_field*converted_width_film*converted_length_film)/PHI0
+    #print(f"Vortices that can enter: {fluxoid_theoretic}")
 
 #External current terminals
 if MAKE_TERMINALS== True:
@@ -266,18 +275,43 @@ if MAKE_TERMINALS== True:
     #supplied_ncurrent = dict(source=enter_dc_source, drain=enter_dc_drain)
     dc_source=enter_dc_source
     dc_drain=enter_dc_drain
-    pulse_length = enter_pulse_length
-    dc_background_factor = enter_dc_background_factor
-    print(f"Supplied source current: {dc_source}{units_current} (drain current = {dc_drain}{units_current}). DC pulse length: {pulse_length} (dimensionless)")
+    pulse_on_length = enter_pulse_on_length
+    pulse_on_zero_length = enter_pulse_on_zero_length
+    pulse_off_length = enter_pulse_off_length
+    pulse_off_zero_length = enter_pulse_off_zero_length
+    #dc_background_factor = enter_dc_background_factor
+    print(f"Supplied source current: {dc_source}{units_current} (drain current = {dc_drain}{units_current}). DC pulse length: {pulse_on_length} (dimensionless)")
 
-    initialization_time = 5
+    initialization_time = enter_initialization_time
+
+    
     def dc_pulse(time):
-        if time<=initialization_time:
-            supplied_ncurrent= dict(source=0, drain=0) #first 5tau no current to be able to locate track in postprocess
-        if time>initialization_time and time<=(pulse_length+initialization_time):
+        #Constant curret mode will keep supplying constant current as long as simulation goes on
+        if CURRENT_MODE=="constant":
             supplied_ncurrent = dict(source=dc_source, drain=dc_drain)
+        
+        #Pulse current mode will supply current only for a specified time and then set current to zero
+        elif CURRENT_MODE=="pulse":
+            if time<=initialization_time:
+                supplied_ncurrent= dict(source=0, drain=0) 
+
+            elif time>initialization_time and time<=(pulse_on_length+initialization_time):
+                supplied_ncurrent = dict(source=dc_source, drain=dc_drain)
+
+            elif time>(pulse_on_length+initialization_time) and time<=(pulse_on_length+initialization_time+pulse_on_zero_length):
+                supplied_ncurrent = dict(source=0, drain=0)
+
+            elif time>(pulse_on_length+initialization_time+pulse_on_zero_length) and time<=(pulse_on_length+initialization_time+pulse_on_zero_length+pulse_off_length):
+                supplied_ncurrent = dict(source=-1*dc_source, drain=-1*dc_drain)
+
+            elif time>(pulse_on_length+initialization_time+pulse_on_zero_length+pulse_off_length) and time<=(pulse_on_length+initialization_time+pulse_on_zero_length+pulse_off_length+pulse_off_zero_length):
+                supplied_ncurrent = dict(source=0, drain=0)
+            else:
+                supplied_ncurrent = dict(source=0, drain=0)
+
         else:
             supplied_ncurrent = dict(source=0, drain=0)
+            
         return supplied_ncurrent
 else:
     ncurrent_terminals = []
@@ -298,7 +332,9 @@ else:
 print(f"Max length of mesh edge set to {mesh_edge_length}")
 print("---------------------------")
 sc_device.make_mesh(max_edge_length=mesh_edge_length, smooth=1) #smooth 1 or 100 had very little effect on how the mesh looks
-fig, ax = sc_device.plot(mesh=True, legend=True)
+
+#plot the device before solving
+#fig, ax = sc_device.plot(mesh=True, legend=True)
 #fig, ax= sc_device.draw()
 #plt.show()
 
@@ -316,13 +352,19 @@ fig, axes= solution_zero_current.plot_order_parameter(squared=False)
 plt.suptitle(f"Order Parameter Plot after T={enter_solve_time}, "+ r"$B_{app}$="+f"{B_applied_field}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_london:.4f}{units_length}, $\\xi$={xi_coherence:.4f}{units_length})")
 
 #visualization of fluxoid calculation areas
-r_fluxoid_calc_surface = 1.5*hole_radius
+r_fluxoid_calc_surface = 1.2*hole_radius
 center_fluxoid_calc_surface = hole_center
 fluxoid_calc_surface = circle(radius=r_fluxoid_calc_surface, center=center_fluxoid_calc_surface, points=201)
-fluxoid_in_surface = solution_zero_current.polygon_fluxoid(fluxoid_calc_surface, with_units=False)
-print(f"Fluxoid over outlined area: \n\t{fluxoid_in_surface} Phi_0 \n\tTotal fluxoid over outlined area: {sum(fluxoid_in_surface):.2f} Phi_0 \n")
+fluxoid_in_surface = solution_zero_current.polygon_fluxoid(fluxoid_calc_surface, with_units=False) #fluxoid in hole
+print(f"Fluxoid in trap area: \n\t{fluxoid_in_surface} Phi_0 \n\tTotal fluxoid in trap area: {sum(fluxoid_in_surface):.2f} Phi_0 \n")
+
+fluxoid_calc_point_track= circle(radius=r_fluxoid_calc_surface, center=(250,-330))
+fluxoid_in_track_point = solution_zero_current.polygon_fluxoid(fluxoid_calc_point_track, with_units=False) #fluxoid somewhere else
+print(f"Fluxoid over other point: \n\t{fluxoid_in_track_point} Phi_0 \n\tTotal fluxoid over outlined other point area: {sum(fluxoid_in_track_point):.2f} Phi_0 \n")
+
 for ax in axes:
     ax.plot(*fluxoid_calc_surface.T)
+    ax.plot(*fluxoid_calc_point_track.T)
 
 if show_london_box==True:
     london_box=box(width=(sc_film_length-lambda_london))
@@ -332,22 +374,14 @@ if show_xi_coherence_box==True:
     xi_coherence_box=box(width=(sc_film_length-xi_coherence))
     for ax in axes:
         ax.plot(*xi_coherence_box.T)
+        
+fig, ax = solution_zero_current.plot_currents(min_stream_amp=0.075, vmin=0, vmax=10)
 
 plt.show()
 
 if MAKE_ANIMATIONS==True:
     create_animation(input_file=enter_animation_input, output_file=enter_animation_output, quantities=enter_animation_quantities, fps=enter_fps, max_cols=2)
-    #create_animation(input_file=enter_write_solution_results, output_file=enter_animation_output, quantities=enter_animation_quantities, fps=enter_fps, max_cols=2)
 
-#vortex_movement_current = tdgl.get_current_through_paths(enter_write_solution_results, paths=track.points, dataset="normal_current", units=units_current)
-#print(f"{vortex_movement_current}")
-
-#postprocessing
-
-#Determine how many vortices over area
-
-
-#Determine how many vortices through the entire film area, incl hole
 '''
 scale_sc_film_by = 0.99  #must be lower than 1 because fluxoid calculation area has to be smaller than sc_film
 reduced_simulation_surface = sc_film.scale(xfact=scale_sc_film_by, yfact=scale_sc_film_by).points
