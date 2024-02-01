@@ -51,7 +51,7 @@ solution_notch_length = 110
 
 imported_solution_dynamics = tdgl.Solution.from_hdf5(RESULTS_FILE) 
 actual_simulation_time = imported_solution_dynamics.times #times in tau0
-simulation_frame_range = range(36,48) #frames, not actual time. User-defined range
+simulation_frame_range = range(1,49) #frames, not actual time. User-defined range
 #chosen_solve_step = 294
 #imported_solution_dynamics.load_tdgl_data(solve_step=chosen_solve_step)
 
@@ -80,15 +80,16 @@ fluxoid_measure_contours = {
 
 
 print(f"Writing to {outputwrite}...")
+outputwrite.write("frame, time_tau0, time_ps, fluxoid_C1, fluxoid_C2, fluxoid_C3, fluxoid_C4 \n")
 for t_step in simulation_frame_range:
     imported_solution_dynamics.load_tdgl_data(solve_step=t_step)
-    print(f"step={t_step}, t={actual_simulation_time[t_step]}, ",end=" ")
+    outputwrite.write(f"{t_step}, {actual_simulation_time[t_step]}, {0.26942298611961255*actual_simulation_time[t_step]}")
     for name, (radius, center) in fluxoid_measure_contours.items():
         polygon = circle(radius, center=center, points=201)
         fluxoid_in_contour_at_step = imported_solution_dynamics.polygon_fluxoid(polygon, with_units=False)
-        print(f"{name} fluxoid= {sum(fluxoid_in_contour_at_step)}, ",end=" ")
+        outputwrite.write(f", {sum(fluxoid_in_contour_at_step)}")
         #print(f"{name}:\n\t{fluxoid_in_contour_at_step} Phi_0\n\tTotal fluxoid: {sum(fluxoid_in_contour_at_step)} Phi_0\n")
-    print(" ")
+    outputwrite.write(" \n")
     #outputwrite.write(f"{t_step}, {actual_simulation_time[t_step]}, {sum(fluxoid_at_step)}, {sum(fluxoid_left)}\n") #, {sum(fluxoid_right)}\n")
 print("Done!")
 outputwrite.close()
