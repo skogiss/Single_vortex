@@ -39,50 +39,51 @@ enter_notch_max_heigth= 110
 enter_notch_orienation = "Right"
 enter_notch_placement_y = 0*enter_film_length/2
 
-make_hole = True
+make_hole = False
 AUTO_HOLE_RADIUS = True
-enter_hole_radius_factor = 2
+enter_hole_radius_factor = 3
 enter_hole_radius = 60
 enter_hole_center = (0,0)
 
-make_track = False
+make_track = True
+FULL_LENGTH_TRACK = True
 AUTO_TRACK_WIDTH = False
 enter_track_width_factor = 2.5
-enter_track_width = 170
-enter_track_epsilon = 0.4
+enter_track_width = 190
+enter_track_epsilon = 0.6
 
 MAKE_TERMINALS = True
 enter_source_width = enter_film_width
 enter_source_length = enter_film_width/100
 enter_initialization_time = 0
 CURRENT_MODE = "constant" #"constant" or "pulse"
-enter_dc_source = 51.2421875
+enter_dc_source = (36+35.3125)/2
 enter_dc_drain = -enter_dc_source
 #enter_dc_background_factor = 0
-enter_pulse_on_length = 27
-enter_pulse_on_zero_length = 30
-enter_pulse_off_length = 12
-enter_pulse_off_zero_length = 15
+enter_pulse_on_length = 89
+enter_pulse_on_zero_length = 0
+enter_pulse_off_length = 0
+enter_pulse_off_zero_length = 0
 enter_voltmeter_points = [(0, enter_film_length/2.5), (0, -enter_film_length/2.5)]
 
-CONTINUE_SOLVING = False
-enter_filename_previous_solution = None#"h5_on_wtrack170_y06.h5"
+CONTINUE_SOLVING = True
+enter_filename_previous_solution = "h5_vortex_init_37_5uA_87tau.h5"
 AUTO_MESH_EDGE = True
 enter_max_edge_factor = 0.6
 enter_max_edge_length = 15  #mesh element size, should be small compared to xi_coherence
 enter_skip_time = 0
-enter_solve_time = 2000
-enter_save_every = 400
+enter_solve_time = 21
+enter_save_every = 200
 do_monitor = True
 show_london_box=False
 show_xi_coherence_box=False
 
 MAKE_ANIMATIONS = False
-enter_write_solution_results = None#"h5_hole2xi_AC_vortex_coming_back.h5"
+enter_write_solution_results = None#"h5_vortex_init_37_5uA_87tau.h5"
 enter_animation_input = enter_write_solution_results
-enter_animation_output = "trap_bad_hole2xi_AC_vortex_coming_back.mp4"
+enter_animation_output = "stablepin_track_eps05_26_25uA.mp4"
 enter_animation_quantities = ('order_parameter', 'phase', 'supercurrent', 'normal_current')
-enter_fps = 15
+enter_fps = 10
 
 print("---------------------------")
 ##############MAIN SIMULATION LOGIC STARTS BEYOND THIS POINT##############################
@@ -134,7 +135,7 @@ sc_film_length = enter_film_length #1000
 sc_film_width = enter_film_width
 
 sc_film= tdgl.Polygon("film", points=box(width=sc_film_width, height=sc_film_length))
-print(f"Superconducting layer created, dimensions: {sc_film_length}x{sc_film_length}x{film_thickness} {units_length}")
+print(f"Superconducting layer created, dimensions: {sc_film_length}x{sc_film_width}x{film_thickness} {units_length}")
 
 #notch geometry
 notch_length= enter_notch_length
@@ -148,7 +149,7 @@ def create_notch(notch_length, notch_max_heigth, notch_placement_y):
     if notch_orientation == "Left":
         notch_placement_x = (-1)*notch_placement_x
     hole_notch=hole_notch.translate(dx=notch_placement_x, dy=notch_placement_y)
-    print(f"Making notch in y={notch_placement_y} ({notch_orientation} edge)")
+    print(f"Making {notch_length}x{notch_max_heigth} notch in y={notch_placement_y} ({notch_orientation} edge)")
     return hole_notch
 
 
@@ -180,6 +181,7 @@ else:
     print("No holes added to SC sheet")
 
 #track geometry
+
 def create_track(track_width, notch_in_film, center_of_hole):
     #hole_notch=notch_in_film1.difference(tdgl.Polygon(points=box(width=notch_ellipse_big,height=2*notch_ellipse_small)).translate(dx=notch_ellipse_big/2))
     tmp_coord_notch = notch_in_film.bbox
@@ -215,11 +217,11 @@ def create_track(track_width, notch_in_film, center_of_hole):
             track_notch_gap_y = notch_endpoint[1] - track.bbox[1][1] #same bbox coordinates rotate too
             track_notch_gap_x = notch_endpoint[0] - track.bbox[1][0]
 
-    track=track.translate(dx=track_notch_gap_x+50,dy=track_notch_gap_y-30).resample(800)#.difference(hole_round).resample(800) #OBS! Re-add difference if needed
+    track=track.translate(dx=track_notch_gap_x+100,dy=track_notch_gap_y-0).resample(800)#.difference(hole_round).resample(800) #OBS! Re-add difference if needed
     print(f"Track between hole center and {notch_endpoint}, length: {track_length}, angle: {track_angle}")
     return track
 
-if make_track==True:
+if (make_track==True and FULL_LENGTH_TRACK!=True):
     if not (make_hole==True and make_notch_on_vertical==True):
         print("WARNING! Can't create track because hole, notch or both are missing. Constant epsilon_disorder will be set.")
         def track_epsilon(r):
@@ -243,6 +245,23 @@ if make_track==True:
             else:
                 epsilon=1.0
             return epsilon
+
+elif (make_track==True and FULL_LENGTH_TRACK==True):
+    if AUTO_TRACK_WIDTH == True:
+        track_width=enter_track_width_factor*xi_coherence
+    else:
+        track_width = enter_track_width
+
+    track = tdgl.Polygon("track", points=box(width=sc_film_width, height=track_width, center=(0,0))).resample(800)
+    print(f"Full-length track added. Track width={track_width}, epsilon in track= {enter_track_epsilon}")
+    def track_epsilon(r):
+            track_epsilon.track_points = track.points #to be able to access track coordinates from saved solution later
+            if track.contains_points(r)==True or track.on_boundary(r)==True:
+                epsilon=enter_track_epsilon
+            else:
+                epsilon=1.0
+            return epsilon
+
 else:
     print("No track on SC sheet")
     def track_epsilon(r):
@@ -339,7 +358,7 @@ sc_device.make_mesh(max_edge_length=mesh_edge_length, smooth=1) #smooth 1 or 100
 #plt.show()
 
 #solve TDGL
-tdgl_options = tdgl.SolverOptions(skip_time=enter_skip_time, solve_time=enter_solve_time, monitor=do_monitor, monitor_update_interval=0.5, save_every=enter_save_every, output_file=enter_write_solution_results, field_units=units_field, current_units=units_current)
+tdgl_options = tdgl.SolverOptions(skip_time=enter_skip_time, solve_time=enter_solve_time, monitor=do_monitor, monitor_update_interval=1, save_every=enter_save_every, output_file=enter_write_solution_results, field_units=units_field, current_units=units_current)
 
 if CONTINUE_SOLVING== True:
     solution_previous= tdgl.Solution.from_hdf5(enter_filename_previous_solution)
@@ -349,22 +368,31 @@ else:
 solution_zero_current = tdgl.solve(sc_device, tdgl_options, applied_vector_potential=B_applied_field, disorder_epsilon=track_epsilon, terminal_currents=dc_pulse, seed_solution=solution_previous)
 
 fig, axes= solution_zero_current.plot_order_parameter(squared=False)
-plt.suptitle(f"Order Parameter Plot after T={enter_solve_time}, "+ r"$B_{app}$="+f"{B_applied_field}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_london:.4f}{units_length}, $\\xi$={xi_coherence:.4f}{units_length})")
+plt.suptitle(f"Order Parameter Plot, J_ext={enter_dc_source}uA")
+#plt.suptitle(f"Order Parameter Plot after T={enter_solve_time}, "+ r"$B_{app}$="+f"{B_applied_field}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_london:.4f}{units_length}, $\\xi$={xi_coherence:.4f}{units_length})")
 
 #visualization of fluxoid calculation areas
-r_fluxoid_calc_surface = 1.2*hole_radius
+r_fluxoid_calc_surface = 1.0*hole_radius
 center_fluxoid_calc_surface = hole_center
 fluxoid_calc_surface = circle(radius=r_fluxoid_calc_surface, center=center_fluxoid_calc_surface, points=201)
 fluxoid_in_surface = solution_zero_current.polygon_fluxoid(fluxoid_calc_surface, with_units=False) #fluxoid in hole
-print(f"Fluxoid in trap area: \n\t{fluxoid_in_surface} Phi_0 \n\tTotal fluxoid in trap area: {sum(fluxoid_in_surface):.2f} Phi_0 \n")
+print(f"Fluxoid in trap area: \n\t{fluxoid_in_surface} Phi_0 \n\tTotal fluxoid in trap area: {sum(fluxoid_in_surface)} Phi_0 \n")
 
-fluxoid_calc_point_track= circle(radius=r_fluxoid_calc_surface, center=(250,-330))
-fluxoid_in_track_point = solution_zero_current.polygon_fluxoid(fluxoid_calc_point_track, with_units=False) #fluxoid somewhere else
-print(f"Fluxoid over other point: \n\t{fluxoid_in_track_point} Phi_0 \n\tTotal fluxoid over outlined other point area: {sum(fluxoid_in_track_point):.2f} Phi_0 \n")
+left_point_dx = -sc_film_width/2+xi_coherence*3
+fluxoid_calc_point_track1= circle(radius=hole_radius*1.0, center=(left_point_dx,0))
+fluxoid_in_track_point1 = solution_zero_current.polygon_fluxoid(fluxoid_calc_point_track1, with_units=False) #fluxoid somewhere else
+print(f"Fluxoid over other point L: \n\t{fluxoid_in_track_point1} Phi_0 \n\tTotal fluxoid over outlined other point area: {sum(fluxoid_in_track_point1)} Phi_0 \n")
+
+right_point_dx=sc_film_width/2-(notch_length+xi_coherence*3)
+print(f"Center dx for point R x={right_point_dx}")
+fluxoid_calc_point_track2= circle(radius=hole_radius*1.0, center=(right_point_dx,0))
+fluxoid_in_track_point2 = solution_zero_current.polygon_fluxoid(fluxoid_calc_point_track2, with_units=False) #fluxoid somewhere else
+print(f"Fluxoid over other point R \n\t{fluxoid_in_track_point2} Phi_0 \n\tTotal fluxoid over outlined other point area: {sum(fluxoid_in_track_point2)} Phi_0 \n")
 
 for ax in axes:
     ax.plot(*fluxoid_calc_surface.T)
-    ax.plot(*fluxoid_calc_point_track.T)
+    ax.plot(*fluxoid_calc_point_track1.T)
+    ax.plot(*fluxoid_calc_point_track2.T)
 
 if show_london_box==True:
     london_box=box(width=(sc_film_length-lambda_london))
