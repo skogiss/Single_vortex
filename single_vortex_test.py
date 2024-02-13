@@ -2,6 +2,7 @@ import os
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 import h5py
+import terminal_current
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
@@ -39,14 +40,14 @@ enter_notch_max_heigth= 110
 enter_notch_orienation = "Right"
 enter_notch_placement_y = 0*enter_film_length/2
 
-make_hole = False
+make_hole = True
 AUTO_HOLE_RADIUS = True
 enter_hole_radius_factor = 3
 enter_hole_radius = 60
 enter_hole_center = (0,0)
 
 make_track = True
-FULL_LENGTH_TRACK = True
+FULL_LENGTH_TRACK = False
 AUTO_TRACK_WIDTH = False
 enter_track_width_factor = 2.5
 enter_track_width = 190
@@ -56,32 +57,33 @@ MAKE_TERMINALS = True
 enter_source_width = enter_film_width
 enter_source_length = enter_film_width/100
 enter_initialization_time = 0
-CURRENT_MODE = "constant" #"constant" or "pulse"
-enter_dc_source = (36+35.3125)/2
+CURRENT_MODE = "wave_square2" #"constant", "pulse", "wave_square2"
+enter_dc_source = 90
 enter_dc_drain = -enter_dc_source
-#enter_dc_background_factor = 0
-enter_pulse_on_length = 89
-enter_pulse_on_zero_length = 0
-enter_pulse_off_length = 0
-enter_pulse_off_zero_length = 0
+enter_dc_source_negative = -38.75
+enter_dc_drain_negative = -enter_dc_source_negative
+enter_pulse_on_length = 7
+enter_pulse_on_zero_length = 50 #enter_pulse_on_length/2
+enter_pulse_off_length = 5
+enter_pulse_off_zero_length = 20 #enter_pulse_off_length/2
 enter_voltmeter_points = [(0, enter_film_length/2.5), (0, -enter_film_length/2.5)]
 
-CONTINUE_SOLVING = True
-enter_filename_previous_solution = "h5_vortex_init_37_5uA_87tau.h5"
+CONTINUE_SOLVING = False
+enter_filename_previous_solution = "h5_pulse_30uA.h5"
 AUTO_MESH_EDGE = True
 enter_max_edge_factor = 0.6
 enter_max_edge_length = 15  #mesh element size, should be small compared to xi_coherence
 enter_skip_time = 0
-enter_solve_time = 21
+enter_solve_time = 500
 enter_save_every = 200
 do_monitor = True
 show_london_box=False
 show_xi_coherence_box=False
 
 MAKE_ANIMATIONS = False
-enter_write_solution_results = None#"h5_vortex_init_37_5uA_87tau.h5"
+enter_write_solution_results = None#"h5_SS_corner_29_53125uA_5_44921875uA.h5"#f"h5_pulse_{enter_dc_source}uA.h5"
 enter_animation_input = enter_write_solution_results
-enter_animation_output = "stablepin_track_eps05_26_25uA.mp4"
+enter_animation_output = "SS_corner_29_53125uA_5_44921875uA.mp4"
 enter_animation_quantities = ('order_parameter', 'phase', 'supercurrent', 'normal_current')
 enter_fps = 10
 
@@ -294,6 +296,8 @@ if MAKE_TERMINALS== True:
     #supplied_ncurrent = dict(source=enter_dc_source, drain=enter_dc_drain)
     dc_source=enter_dc_source
     dc_drain=enter_dc_drain
+    dc_source_negative = enter_dc_source_negative
+    dc_drain_negative = enter_dc_drain_negative
     pulse_on_length = enter_pulse_on_length
     pulse_on_zero_length = enter_pulse_on_zero_length
     pulse_off_length = enter_pulse_off_length
@@ -308,6 +312,11 @@ if MAKE_TERMINALS== True:
         #Constant curret mode will keep supplying constant current as long as simulation goes on
         if CURRENT_MODE=="constant":
             supplied_ncurrent = dict(source=dc_source, drain=dc_drain)
+
+        elif CURRENT_MODE=="wave_square2":
+            sw2_source_current = terminal_current.square_wave2(time, dc_source, pulse_on_length, 0, pulse_on_zero_length, dc_source_negative, pulse_off_length, 0, pulse_off_zero_length)
+            sw2_drain_current = -sw2_source_current
+            supplied_ncurrent = dict(source=sw2_source_current, drain=sw2_drain_current)
         
         #Pulse current mode will supply current only for a specified time and then set current to zero
         elif CURRENT_MODE=="pulse":
@@ -321,7 +330,7 @@ if MAKE_TERMINALS== True:
                 supplied_ncurrent = dict(source=0, drain=0)
 
             elif time>(pulse_on_length+initialization_time+pulse_on_zero_length) and time<=(pulse_on_length+initialization_time+pulse_on_zero_length+pulse_off_length):
-                supplied_ncurrent = dict(source=-1*dc_source, drain=-1*dc_drain)
+                supplied_ncurrent = dict(source=dc_source_negative, drain=dc_drain_negative)
 
             elif time>(pulse_on_length+initialization_time+pulse_on_zero_length+pulse_off_length) and time<=(pulse_on_length+initialization_time+pulse_on_zero_length+pulse_off_length+pulse_off_zero_length):
                 supplied_ncurrent = dict(source=0, drain=0)
@@ -372,20 +381,20 @@ plt.suptitle(f"Order Parameter Plot, J_ext={enter_dc_source}uA")
 #plt.suptitle(f"Order Parameter Plot after T={enter_solve_time}, "+ r"$B_{app}$="+f"{B_applied_field}{units_field}\n$\kappa$={kappa_gl} ($\lambda$={lambda_london:.4f}{units_length}, $\\xi$={xi_coherence:.4f}{units_length})")
 
 #visualization of fluxoid calculation areas
-r_fluxoid_calc_surface = 1.0*hole_radius
+r_fluxoid_calc_surface = 1.2*hole_radius
 center_fluxoid_calc_surface = hole_center
 fluxoid_calc_surface = circle(radius=r_fluxoid_calc_surface, center=center_fluxoid_calc_surface, points=201)
 fluxoid_in_surface = solution_zero_current.polygon_fluxoid(fluxoid_calc_surface, with_units=False) #fluxoid in hole
 print(f"Fluxoid in trap area: \n\t{fluxoid_in_surface} Phi_0 \n\tTotal fluxoid in trap area: {sum(fluxoid_in_surface)} Phi_0 \n")
 
-left_point_dx = -sc_film_width/2+xi_coherence*3
-fluxoid_calc_point_track1= circle(radius=hole_radius*1.0, center=(left_point_dx,0))
+left_point_dx = -sc_film_width/2+xi_coherence*4.5
+fluxoid_calc_point_track1= circle(radius=hole_radius*1, center=(left_point_dx,0))
 fluxoid_in_track_point1 = solution_zero_current.polygon_fluxoid(fluxoid_calc_point_track1, with_units=False) #fluxoid somewhere else
 print(f"Fluxoid over other point L: \n\t{fluxoid_in_track_point1} Phi_0 \n\tTotal fluxoid over outlined other point area: {sum(fluxoid_in_track_point1)} Phi_0 \n")
 
-right_point_dx=sc_film_width/2-(notch_length+xi_coherence*3)
+right_point_dx=sc_film_width/2-(notch_length+xi_coherence*3)+8
 print(f"Center dx for point R x={right_point_dx}")
-fluxoid_calc_point_track2= circle(radius=hole_radius*1.0, center=(right_point_dx,0))
+fluxoid_calc_point_track2= circle(radius=hole_radius*0.95, center=(right_point_dx,0))
 fluxoid_in_track_point2 = solution_zero_current.polygon_fluxoid(fluxoid_calc_point_track2, with_units=False) #fluxoid somewhere else
 print(f"Fluxoid over other point R \n\t{fluxoid_in_track_point2} Phi_0 \n\tTotal fluxoid over outlined other point area: {sum(fluxoid_in_track_point2)} Phi_0 \n")
 
@@ -403,7 +412,7 @@ if show_xi_coherence_box==True:
     for ax in axes:
         ax.plot(*xi_coherence_box.T)
         
-fig, ax = solution_zero_current.plot_currents(min_stream_amp=0.075, vmin=0, vmax=10)
+#fig, ax = solution_zero_current.plot_currents(min_stream_amp=0.075, vmin=0, vmax=10)
 
 plt.show()
 
