@@ -18,24 +18,29 @@ PHI0 = 2.06783e-15*ureg.T*ureg.m**2
 
 
 #File to be post-processed and some parameters of that simulation
-RESULTS_FILE= "h5_vvelocity_J_35uA_save25.h5"
+RESULTS_FILE= "h5_test_for_pass_current.h5" 
 
 solution_xi = 44.7214
 solution_film_width = 1000
 solution_notch_length = 110
 
-MAKE_ANIMATIONS_FROM_INPUT = False
-animation_file_name = None
+MAKE_ANIMATIONS_FROM_INPUT = 0
+animation_file_name = "deleteme.mp4"
 animation_fps = 15
 
 MAKE_VORTEX_MEASURE_CONTOURS = True
-vortex_contour_radius = 0.5*solution_xi
-DISPLAY_ONE_SOLVE_STEP = True
-load_frame_nr = 14
+vortex_contour_radius = 3.2*solution_xi
+measure_fluxoid_in = "C" #"CLR", "C"
+
+DISPLAY_ONE_SOLVE_STEP = False
+load_frame_nr = 2
 
 CALC_VORTEX_DYNAMICS_IN_CONTOURS = True
+DYNAMICS_TO_OUTPUT = True
 output_write_file = "fluxoid_t_output.txt"
-range_for_flux_calc = range(7,15) #range of frames in the solution to calc over
+range_for_flux_calc = range(1,18) #range of frames in the solution to calc over
+
+SOURCE_CURRENT_TO_OUTPUT = True
 
 #Create animation from input file
 if MAKE_ANIMATIONS_FROM_INPUT==True:
@@ -61,7 +66,6 @@ imported_solution_dynamics = tdgl.Solution.from_hdf5(RESULTS_FILE)
 actual_simulation_time = imported_solution_dynamics.times #times in tau0
 
 
-
 #Function for contour creation
 def setup_fluxoid_measure_stations():
     
@@ -76,14 +80,21 @@ def setup_fluxoid_measure_stations():
 
     #dx_between_contours = np.array([dx_C1_C2, dx_C2_C3, dx_C3_C4, dx_C4_edge]) #right to left
     #print(f"dx between contours: {dx_between_contours}")
+    
+    if measure_fluxoid_in == "CLR":
+        fluxoid_measure_stations = {
+            #name: (circle radius, circle center)
+            #"C1": (vortex_contour_radius, (right_point_dx, 0)), #rightmost
+            #"C2": (vortex_contour_radius, (0, 0)), #center
+            #"C3": (vortex_contour_radius, (leftcenter_point_dx, 0)), #left of center
+            #"C4": (vortex_contour_radius, (left_point_dx, 0)) #leftmost
+            "Center": (vortex_contour_radius, (0,0)),
+            "Left": (solution_xi*3, (-solution_film_width/2+solution_xi*4.5,0)),
+            "Right": (solution_xi*3*0.95, (solution_film_width/2-(110+solution_xi*3)+7,0))
+        }
+    elif measure_fluxoid_in == "C":
+        fluxoid_measure_stations = {"Center": (vortex_contour_radius, (0,0))}
 
-    fluxoid_measure_stations = {
-        #name: (circle radius, circle center)
-        "C1": (vortex_contour_radius, (right_point_dx, 0)), #rightmost
-        "C2": (vortex_contour_radius, (0, 0)), #center
-        "C3": (vortex_contour_radius, (leftcenter_point_dx, 0)), #left of center
-        "C4": (vortex_contour_radius, (left_point_dx, 0)) #leftmost
-    }
     return fluxoid_measure_stations
 
 if MAKE_VORTEX_MEASURE_CONTOURS==True:
@@ -102,19 +113,33 @@ if DISPLAY_ONE_SOLVE_STEP == True:
 
     plt.show()
 
-if CALC_VORTEX_DYNAMICS_IN_CONTOURS==True and MAKE_VORTEX_MEASURE_CONTOURS==True:
+if DYNAMICS_TO_OUTPUT == True:
 #simulation_frame_range = range(1,1) #frames, not actual time. User-defined range
     outputwrite = open(output_write_file, "w")
     print(f"Writing from {RESULTS_FILE} to {outputwrite}...")
-    outputwrite.write("frame, time_tau0, time_ps, fluxoid_C1, fluxoid_C2, fluxoid_C3, fluxoid_C4 \n")
+    outputwrite.write("frame, time_tau0, time_ps")
+    if SOURCE_CURRENT_TO_OUTPUT == True:
+            outputwrite.write(f", J_ext_source")
+    
+    if CALC_VORTEX_DYNAMICS_IN_CONTOURS==True and MAKE_VORTEX_MEASURE_CONTOURS==True:
+            for name, (radius, center) in fluxoid_measure_contours.items():
+                outputwrite.write(f", fluxoid_{name}")
+    
+    outputwrite.write(" \n")
+
     for t_step in range_for_flux_calc:
         imported_solution_dynamics.load_tdgl_data(solve_step=t_step)
         outputwrite.write(f"{t_step}, {actual_simulation_time[t_step]}, {0.26942298611961255*actual_simulation_time[t_step]}")
-        for name, (radius, center) in fluxoid_measure_contours.items():
-            polygon = circle(radius, center=center, points=201)
-            fluxoid_in_contour_at_step = imported_solution_dynamics.polygon_fluxoid(polygon, with_units=False)
-            outputwrite.write(f", {sum(fluxoid_in_contour_at_step)}")
-            #print(f"{name}:\n\t{fluxoid_in_contour_at_step} Phi_0\n\tTotal fluxoid: {sum(fluxoid_in_contour_at_step)} Phi_0\n")
+        if SOURCE_CURRENT_TO_OUTPUT == True:
+            source_current_at_time = imported_solution_dynamics.terminal_currents.supplied_source_current
+            outputwrite.write(f", {source_current_at_time}")
+
+        if CALC_VORTEX_DYNAMICS_IN_CONTOURS==True and MAKE_VORTEX_MEASURE_CONTOURS==True:
+            for name, (radius, center) in fluxoid_measure_contours.items():
+                polygon = circle(radius, center=center, points=201)
+                fluxoid_in_contour_at_step = imported_solution_dynamics.polygon_fluxoid(polygon, with_units=False)
+                outputwrite.write(f", {sum(fluxoid_in_contour_at_step)}")
+                #print(f"{name}:\n\t{fluxoid_in_contour_at_step} Phi_0\n\tTotal fluxoid: {sum(fluxoid_in_contour_at_step)} Phi_0\n")
         outputwrite.write(" \n")
         #outputwrite.write(f"{t_step}, {actual_simulation_time[t_step]}, {sum(fluxoid_at_step)}, {sum(fluxoid_left)}\n") #, {sum(fluxoid_right)}\n")
     print("Done!")

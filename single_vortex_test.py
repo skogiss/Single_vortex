@@ -57,35 +57,35 @@ MAKE_TERMINALS = True
 enter_source_width = enter_film_width
 enter_source_length = enter_film_width/100
 enter_initialization_time = 0
-CURRENT_MODE = "wave_square2" #"constant", "pulse", "wave_square2"
-enter_dc_source = 90
+CURRENT_MODE = "constant" #"constant", "pulse", "wave_square2"
+enter_dc_source = -6
 enter_dc_drain = -enter_dc_source
-enter_dc_source_negative = -38.75
+enter_dc_source_negative = 0
 enter_dc_drain_negative = -enter_dc_source_negative
-enter_pulse_on_length = 7
-enter_pulse_on_zero_length = 50 #enter_pulse_on_length/2
-enter_pulse_off_length = 5
-enter_pulse_off_zero_length = 20 #enter_pulse_off_length/2
+enter_pulse_on_length = 52
+enter_pulse_on_zero_length = 0#enter_pulse_on_length/2
+enter_pulse_off_length = 11
+enter_pulse_off_zero_length = 0#enter_pulse_off_length/2
 enter_voltmeter_points = [(0, enter_film_length/2.5), (0, -enter_film_length/2.5)]
 
-CONTINUE_SOLVING = False
-enter_filename_previous_solution = "h5_pulse_30uA.h5"
+CONTINUE_SOLVING = True
+enter_filename_previous_solution = "dontrm_h5_init_pinning_30uA.h5"
 AUTO_MESH_EDGE = True
 enter_max_edge_factor = 0.6
 enter_max_edge_length = 15  #mesh element size, should be small compared to xi_coherence
 enter_skip_time = 0
-enter_solve_time = 500
-enter_save_every = 200
+enter_solve_time = 20
+enter_save_every = 100
 do_monitor = True
 show_london_box=False
 show_xi_coherence_box=False
 
 MAKE_ANIMATIONS = False
-enter_write_solution_results = None#"h5_SS_corner_29_53125uA_5_44921875uA.h5"#f"h5_pulse_{enter_dc_source}uA.h5"
+enter_write_solution_results = "h5_test_for_pass_current.h5"#"dontrm_h5_init_pinning_30uA.h5"#f"h5_strobo_Wtrack_190_{enter_dc_source}uA.h5"#f"h5_pulse_{enter_dc_source}uA.h5"
 enter_animation_input = enter_write_solution_results
-enter_animation_output = "SS_corner_29_53125uA_5_44921875uA.mp4"
+enter_animation_output = "strobo_37uA_toohigh.mp4"
 enter_animation_quantities = ('order_parameter', 'phase', 'supercurrent', 'normal_current')
-enter_fps = 10
+enter_fps = 5
 
 print("---------------------------")
 ##############MAIN SIMULATION LOGIC STARTS BEYOND THIS POINT##############################
@@ -340,6 +340,8 @@ if MAKE_TERMINALS== True:
         else:
             supplied_ncurrent = dict(source=0, drain=0)
             
+        
+        dc_pulse.supplied_source_current = supplied_ncurrent["source"]       
         return supplied_ncurrent
 else:
     ncurrent_terminals = []
