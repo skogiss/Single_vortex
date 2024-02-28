@@ -58,34 +58,34 @@ enter_source_width = enter_film_width
 enter_source_length = enter_film_width/100
 enter_initialization_time = 0
 CURRENT_MODE = "constant" #"constant", "pulse", "wave_square2"
-enter_dc_source = -6
+enter_dc_source = 31
 enter_dc_drain = -enter_dc_source
-enter_dc_source_negative = 0
+enter_dc_source_negative = -5.625
 enter_dc_drain_negative = -enter_dc_source_negative
-enter_pulse_on_length = 52
-enter_pulse_on_zero_length = 0#enter_pulse_on_length/2
-enter_pulse_off_length = 11
-enter_pulse_off_zero_length = 0#enter_pulse_off_length/2
+enter_pulse_on_length = 387
+enter_pulse_on_zero_length = 20#enter_pulse_on_length/2
+enter_pulse_off_length = 165
+enter_pulse_off_zero_length = 20#enter_pulse_off_length/2
 enter_voltmeter_points = [(0, enter_film_length/2.5), (0, -enter_film_length/2.5)]
 
-CONTINUE_SOLVING = True
+CONTINUE_SOLVING = False
 enter_filename_previous_solution = "dontrm_h5_init_pinning_30uA.h5"
 AUTO_MESH_EDGE = True
-enter_max_edge_factor = 0.6
+enter_max_edge_factor = 0.5
 enter_max_edge_length = 15  #mesh element size, should be small compared to xi_coherence
 enter_skip_time = 0
-enter_solve_time = 20
-enter_save_every = 100
-do_monitor = True
+enter_solve_time = 74
+enter_save_every = 200
+do_monitor = 0
 show_london_box=False
 show_xi_coherence_box=False
 
 MAKE_ANIMATIONS = False
-enter_write_solution_results = "h5_test_for_pass_current.h5"#"dontrm_h5_init_pinning_30uA.h5"#f"h5_strobo_Wtrack_190_{enter_dc_source}uA.h5"#f"h5_pulse_{enter_dc_source}uA.h5"
+enter_write_solution_results = None#f"h5_squarewave_kneeknee_{enter_dc_source}uA_{enter_dc_source_negative}.h5"
 enter_animation_input = enter_write_solution_results
-enter_animation_output = "strobo_37uA_toohigh.mp4"
+enter_animation_output = f"squarewave_kneeknee_{enter_dc_source}uA_{enter_dc_source_negative}.mp4"
 enter_animation_quantities = ('order_parameter', 'phase', 'supercurrent', 'normal_current')
-enter_fps = 5
+enter_fps = 20
 
 print("---------------------------")
 ##############MAIN SIMULATION LOGIC STARTS BEYOND THIS POINT##############################
@@ -314,8 +314,33 @@ if MAKE_TERMINALS== True:
             supplied_ncurrent = dict(source=dc_source, drain=dc_drain)
 
         elif CURRENT_MODE=="wave_square2":
-            sw2_source_current = terminal_current.square_wave2(time, dc_source, pulse_on_length, 0, pulse_on_zero_length, dc_source_negative, pulse_off_length, 0, pulse_off_zero_length)
+            '''
+            if time<=initialization_time:
+                supplied_ncurrent= dict(source=0, drain=0)
+
+                dc_pulse.sw2_amp_h1 = 0
+                dc_pulse.sw2_period_h1 = pulse_on_length
+                dc_pulse.sw2_amp_l1 = 0
+                dc_pulse.sw2_period_l1 = pulse_on_zero_length 
+                dc_pulse.sw2_amp_h2 = 0
+                dc_pulse.sw2_period_h2 = pulse_off_length
+                dc_pulse.sw2_amp_l2 = 0
+                dc_pulse.sw2_period_l2 = pulse_off_zero_length
+            else:
+            '''
+            sw2_source_current = terminal_current.square_wave2(time-initialization_time, dc_source, pulse_on_length, 0, pulse_on_zero_length, dc_source_negative, pulse_off_length, 0, pulse_off_zero_length)
             sw2_drain_current = -sw2_source_current
+            
+            dc_pulse.signal_delay = initialization_time
+            dc_pulse.sw2_amp_h1 = dc_source
+            dc_pulse.sw2_period_h1 = pulse_on_length
+            dc_pulse.sw2_amp_l1 = 0
+            dc_pulse.sw2_period_l1 = pulse_on_zero_length 
+            dc_pulse.sw2_amp_h2 = dc_source_negative
+            dc_pulse.sw2_period_h2 = pulse_off_length
+            dc_pulse.sw2_amp_l2 = 0
+            dc_pulse.sw2_period_l2 = pulse_off_zero_length             
+                
             supplied_ncurrent = dict(source=sw2_source_current, drain=sw2_drain_current)
         
         #Pulse current mode will supply current only for a specified time and then set current to zero
@@ -340,8 +365,7 @@ if MAKE_TERMINALS== True:
         else:
             supplied_ncurrent = dict(source=0, drain=0)
             
-        
-        dc_pulse.supplied_source_current = supplied_ncurrent["source"]       
+               
         return supplied_ncurrent
 else:
     ncurrent_terminals = []
@@ -413,8 +437,10 @@ if show_xi_coherence_box==True:
     xi_coherence_box=box(width=(sc_film_length-xi_coherence))
     for ax in axes:
         ax.plot(*xi_coherence_box.T)
-        
-#fig, ax = solution_zero_current.plot_currents(min_stream_amp=0.075, vmin=0, vmax=10)
+
+track_pts = (solution_zero_current.device).points
+#track_pts=solution_zero_current.disorder_epsilon.track_points * (-1)     
+fig, ax = solution_zero_current.plot_field_at_positions(positions=track_pts, zs=20, vmin=None, vmax=None)
 
 plt.show()
 

@@ -19,19 +19,22 @@ def square_wave2(time, amplitude_high1, time_high1, amplitude_low1, time_low1, a
     duty_cycle_l1 = (time_high1+time_low1)/wave_period
     duty_cycle_h2 = (time_high1+time_low1+time_high2)/wave_period
     
-    time_in_one_period = time % wave_period
-    
-    if time_in_one_period < wave_period*duty_cycle_h1:
-        amplitude_at_time = amplitude_high1
-    elif (time_in_one_period >= wave_period*duty_cycle_h1) and (time_in_one_period < wave_period*duty_cycle_l1):
-        amplitude_at_time = amplitude_low1
-    elif (time_in_one_period >= wave_period*duty_cycle_l1) and (time_in_one_period < wave_period*duty_cycle_h2):
-        amplitude_at_time = amplitude_high2
-    elif (time_in_one_period >= wave_period*duty_cycle_h2):
-        amplitude_at_time = amplitude_low2
-    else:
-        print(f"[square_wave2]WARNING unclear placement of time point. Setting current to zero")
+    if time<0:
         amplitude_at_time = 0
+    else:
+        time_in_one_period = time % wave_period
+
+        if time_in_one_period < wave_period*duty_cycle_h1:
+            amplitude_at_time = amplitude_high1
+        elif (time_in_one_period >= wave_period*duty_cycle_h1) and (time_in_one_period < wave_period*duty_cycle_l1):
+            amplitude_at_time = amplitude_low1
+        elif (time_in_one_period >= wave_period*duty_cycle_l1) and (time_in_one_period < wave_period*duty_cycle_h2):
+            amplitude_at_time = amplitude_high2
+        elif (time_in_one_period >= wave_period*duty_cycle_h2):
+            amplitude_at_time = amplitude_low2
+        else:
+            print(f"[square_wave2]WARNING unclear placement of time point. Setting current to zero")
+            amplitude_at_time = 0
 
     return amplitude_at_time
 

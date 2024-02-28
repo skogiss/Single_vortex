@@ -18,7 +18,7 @@ PHI0 = 2.06783e-15*ureg.T*ureg.m**2
 
 
 #File to be post-processed and some parameters of that simulation
-RESULTS_FILE= "h5_test_for_pass_current.h5" 
+RESULTS_FILE= "h5_squarewave_FF_33.6875uA_-27.5703.h5" 
 
 solution_xi = 44.7214
 solution_film_width = 1000
@@ -38,7 +38,7 @@ load_frame_nr = 2
 CALC_VORTEX_DYNAMICS_IN_CONTOURS = True
 DYNAMICS_TO_OUTPUT = True
 output_write_file = "fluxoid_t_output.txt"
-range_for_flux_calc = range(1,18) #range of frames in the solution to calc over
+range_for_flux_calc = range(1,439) #range of frames in the solution to calc over
 
 SOURCE_CURRENT_TO_OUTPUT = True
 
@@ -119,6 +119,7 @@ if DYNAMICS_TO_OUTPUT == True:
     print(f"Writing from {RESULTS_FILE} to {outputwrite}...")
     outputwrite.write("frame, time_tau0, time_ps")
     if SOURCE_CURRENT_TO_OUTPUT == True:
+            import terminal_current
             outputwrite.write(f", J_ext_source")
     
     if CALC_VORTEX_DYNAMICS_IN_CONTOURS==True and MAKE_VORTEX_MEASURE_CONTOURS==True:
@@ -131,7 +132,8 @@ if DYNAMICS_TO_OUTPUT == True:
         imported_solution_dynamics.load_tdgl_data(solve_step=t_step)
         outputwrite.write(f"{t_step}, {actual_simulation_time[t_step]}, {0.26942298611961255*actual_simulation_time[t_step]}")
         if SOURCE_CURRENT_TO_OUTPUT == True:
-            source_current_at_time = imported_solution_dynamics.terminal_currents.supplied_source_current
+            #source_current_at_time = imported_solution_dynamics.terminal_currents.supplied_source_current
+            source_current_at_time = terminal_current.square_wave2(actual_simulation_time[t_step]-imported_solution_dynamics.terminal_currents.signal_delay, imported_solution_dynamics.terminal_currents.sw2_amp_h1, imported_solution_dynamics.terminal_currents.sw2_period_h1, imported_solution_dynamics.terminal_currents.sw2_amp_l1, imported_solution_dynamics.terminal_currents.sw2_period_l1, imported_solution_dynamics.terminal_currents.sw2_amp_h2, imported_solution_dynamics.terminal_currents.sw2_period_h2, imported_solution_dynamics.terminal_currents.sw2_amp_l2, imported_solution_dynamics.terminal_currents.sw2_period_l2)
             outputwrite.write(f", {source_current_at_time}")
 
         if CALC_VORTEX_DYNAMICS_IN_CONTOURS==True and MAKE_VORTEX_MEASURE_CONTOURS==True:
